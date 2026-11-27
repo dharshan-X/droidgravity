@@ -1148,7 +1148,7 @@ public final class AgentBrowserManager {
                         floatingPill.setVisibility(View.GONE);
                     }
                 }
-            } else if (wcvVisible && !wcvOverlayActive && wcvTab != null
+            } else if (wcvVisible && wcvTab != null
                     && wcvWidthPx > 2 && wcvHeightPx > 2 && hostRoot != null) {
                 // Docked directly inside Antigravity's Side Panel browser viewport rectangle
                 agentContainer.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);

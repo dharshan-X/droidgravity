@@ -21,9 +21,11 @@
   function scaleBounds(boundsCss) {
     var dpr = window.devicePixelRatio || 1;
     var b = boundsCss || {};
+    var x = typeof b.x === "number" ? b.x : (b.left || 0);
+    var y = typeof b.y === "number" ? b.y : (b.top || 0);
     return {
-      l: Math.max(0, Math.round((b.left || 0) * dpr)),
-      t: Math.max(0, Math.round((b.top || 0) * dpr)),
+      l: Math.max(0, Math.round(x * dpr)),
+      t: Math.max(0, Math.round(y * dpr)),
       w: Math.max(0, Math.round((b.width || 0) * dpr)),
       h: Math.max(0, Math.round((b.height || 0) * dpr))
     };
