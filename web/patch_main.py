@@ -169,7 +169,7 @@ def patch_side_panel_browser(content):
     else:
         print("[web-patch] browserAuxPane LOb identifier not matched in main.js", file=sys.stderr)
 
-    for flag_key in ("browserSubagentWebview", "browserSubagentWebviewUx"):
+    for flag_key in ("browserSubagentWebviewUx",):
         old_s = f"{flag_key}:{{feature:!1,"
         new_s = f'{flag_key}:{{feature:(typeof window!=="undefined"&&window.Android?!0:!1),'
         if old_s in content:

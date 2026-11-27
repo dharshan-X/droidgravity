@@ -9,6 +9,7 @@
   var cursorListeners = new Set();
   var shortcutListeners = new Set();
   var pendingOpenQueue = [];
+  var recentBlankCdpTabs = new Map();
 
   function getToken() {
     return (
@@ -114,7 +115,16 @@
     },
     navigate: function (tabKey, url) {
       if (!hasNative()) return Promise.resolve();
-      window.Android.wcvNavigate(getToken(), String(tabKey || ""), String(url || ""));
+      var k = String(tabKey || "");
+      var u = String(url || "");
+      var cdpIdx = k.indexOf("browser__cdp_");
+      var rawCdpKey = cdpIdx >= 0 ? k.slice(cdpIdx) : k;
+      var createdAt = recentBlankCdpTabs.get(rawCdpKey);
+      if (createdAt && u === "https://www.google.com/" && Date.now() - createdAt < 2000) {
+        recentBlankCdpTabs.delete(rawCdpKey);
+        return Promise.resolve();
+      }
+      window.Android.wcvNavigate(getToken(), k, u);
       return Promise.resolve();
     },
     control: function (tabKey, action) {
@@ -172,12 +182,16 @@
     onEvent: function (ev) {
       if (!ev || !ev.type) return;
       if (ev.type === "agent-tab-created") {
+        var u = ev.url || "about:blank";
+        if (ev.tabKey && (!ev.url || ev.url === "about:blank")) {
+          recentBlankCdpTabs.set(String(ev.tabKey), Date.now());
+        }
         if (typeof window.__agOpenSidePanelBrowserTab === "function") {
           try {
-            window.__agOpenSidePanelBrowserTab(ev.tabKey, ev.url || "about:blank");
+            window.__agOpenSidePanelBrowserTab(ev.tabKey, u);
           } catch (_) {}
         } else {
-          pendingOpenQueue.push({ tabKey: ev.tabKey, url: ev.url || "about:blank" });
+          pendingOpenQueue.push({ tabKey: ev.tabKey, url: u });
         }
         return;
       }
