@@ -16,6 +16,7 @@ BODY_PATCH_SNIPPET = (
     '    <script src="./generated/patches/web_optimizations.js"></script>\n'
     '    <script src="./generated/patches/touch_model_menu.js"></script>\n'
     '    <script src="./generated/patches/theme_sync.js"></script>\n'
+    '    <script src="./generated/patches/side_panel_browser.js"></script>\n'
     '    <script src="./generated/bridge.core.js"></script>\n'
 )
 

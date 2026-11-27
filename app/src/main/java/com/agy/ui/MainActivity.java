@@ -167,7 +167,8 @@ public class MainActivity extends Activity
         splash.setRetryListener(this::retryCore);
         rootLayout.addView(splash.view(), ViewParams.full());
         splash.loadInitial();
-        com.agy.browser.AgentBrowserManager.getInstance(this).attachActivity(this, rootLayout);
+        com.agy.browser.AgentBrowserManager.getInstance(this).attachActivity(
+                this, rootLayout, webViewHost != null ? webViewHost.getWebView() : null);
 
         splash.installExitAnimation(this);
 
@@ -315,7 +316,8 @@ public class MainActivity extends Activity
         super.onResume();
         activityResumed = true;
         activeActivity = this;
-        com.agy.browser.AgentBrowserManager.getInstance(this).attachActivity(this, rootLayout);
+        com.agy.browser.AgentBrowserManager.getInstance(this).attachActivity(
+                this, rootLayout, webViewHost != null ? webViewHost.getWebView() : null);
         if (webViewHost != null) {
             AppLifecycle.resume(webViewHost.getWebView());
         }

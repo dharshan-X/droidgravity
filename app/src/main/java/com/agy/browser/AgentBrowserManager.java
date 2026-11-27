@@ -88,6 +88,8 @@ public final class AgentBrowserManager {
 
     /** Registered agent tabs ordered by creation, keyed by CDP target ID. */
     private final Map<String, AgentTab> tabsByCdpId = new LinkedHashMap<>();
+    /** Side Panel WCV tabs keyed by Antigravity tabKey (e.g. "browser__..."). */
+    private final Map<String, AgentTab> tabsByKey = new LinkedHashMap<>();
     private final Set<String> pendingMarkerUrls = new HashSet<>();
 
     private volatile int cdpProxyPort = 0;
@@ -95,8 +97,17 @@ public final class AgentBrowserManager {
     private volatile boolean expanded = false;
     private volatile boolean debuggingEnabled = false;
 
+    private volatile boolean wcvVisible = false;
+    private volatile boolean wcvOverlayActive = false;
+    private volatile String activeWcvTabKey = null;
+    private volatile int wcvLeftPx = 0;
+    private volatile int wcvTopPx = 0;
+    private volatile int wcvWidthPx = 0;
+    private volatile int wcvHeightPx = 0;
+
     private WeakReference<Activity> activityRef = new WeakReference<>(null);
     private WeakReference<FrameLayout> hostRootRef = new WeakReference<>(null);
+    private WeakReference<WebView> uiWebViewRef = new WeakReference<>(null);
 
     private MutableContextWrapper overlayContext;
     private FrameLayout agentContainer;
@@ -122,15 +133,19 @@ public final class AgentBrowserManager {
 
     static final class AgentTab {
         final String token;
+        final int webContentsId;
+        String tabKey;
         String cdpTargetId;
         WebView webView;
         volatile String currentUrl = "about:blank";
         volatile String currentTitle = "";
         volatile boolean loading = false;
+        volatile boolean domReady = false;
         volatile PendingDialog pendingDialog = null;
 
-        AgentTab(String token, WebView webView) {
+        AgentTab(String token, int webContentsId, WebView webView) {
             this.token = token;
+            this.webContentsId = webContentsId;
             this.webView = webView;
         }
     }
@@ -179,12 +194,19 @@ public final class AgentBrowserManager {
      * Safe to call repeatedly across {@code onCreate} / {@code onResume}.
      */
     public void attachActivity(Activity activity, FrameLayout hostRoot) {
+        attachActivity(activity, hostRoot, null);
+    }
+
+    public void attachActivity(Activity activity, FrameLayout hostRoot, WebView uiWebView) {
         if (activity == null || hostRoot == null) {
             return;
         }
         runOnMain(() -> {
             activityRef = new WeakReference<>(activity);
             hostRootRef = new WeakReference<>(hostRoot);
+            if (uiWebView != null) {
+                uiWebViewRef = new WeakReference<>(uiWebView);
+            }
             ensureViewsCreated(activity);
             if (overlayContext != null) {
                 overlayContext.setBaseContext(activity);
@@ -205,6 +227,9 @@ public final class AgentBrowserManager {
             }
             activityRef = new WeakReference<>(null);
             hostRootRef = new WeakReference<>(null);
+            uiWebViewRef = new WeakReference<>(null);
+            wcvVisible = false;
+            wcvOverlayActive = false;
             if (overlayContext != null) {
                 overlayContext.setBaseContext(appContext);
             }
@@ -312,19 +337,26 @@ public final class AgentBrowserManager {
      * @return the newly bound CDP target ID, or {@code null} if creation/discovery failed.
      */
     public String createTab(String initialUrl) {
+        AgentTab tab = createTabInternal(initialUrl, null, true);
+        return tab != null ? tab.cdpTargetId : null;
+    }
+
+    private AgentTab createTabInternal(String initialUrl, String explicitTabKey, boolean notifySidePanel) {
         ensureDebuggingEnabled();
         String targetUrl = normalizeRequestedUrl(initialUrl);
 
         synchronized (createLock) {
             Set<String> knownNonAgentIds = snapshotUnknownTargetIds();
-            String token = "agy-" + tokenSeq.incrementAndGet();
+            int seq = tokenSeq.incrementAndGet();
+            String token = "agy-" + seq;
             String markerUrl = "about:blank?" + MARKER_QUERY_KEY + token;
             pendingMarkerUrls.add(markerUrl);
 
             final AtomicReference<AgentTab> createdRef = new AtomicReference<>();
             runOnMainSync(() -> {
                 ensureViewsCreated(activityRef.get());
-                AgentTab tab = createTabViewOnMain(token, null);
+                AgentTab tab = createTabViewOnMain(token, seq, null);
+                tab.tabKey = explicitTabKey;
                 createdRef.set(tab);
                 tab.webView.loadUrl(markerUrl);
             });
@@ -345,8 +377,12 @@ public final class AgentBrowserManager {
             }
 
             tab.cdpTargetId = cdpId;
+            if (TextUtils.isEmpty(tab.tabKey)) {
+                tab.tabKey = "browser__cdp_" + cdpId;
+            }
             synchronized (tabLock) {
                 tabsByCdpId.put(cdpId, tab);
+                tabsByKey.put(tab.tabKey, tab);
                 selectedTargetId = cdpId;
             }
 
@@ -354,9 +390,12 @@ public final class AgentBrowserManager {
                 tab.currentUrl = targetUrl;
                 tab.webView.loadUrl(targetUrl);
                 syncOverlayStateOnMain();
+                if (notifySidePanel) {
+                    emitWcvHostEvent("agent-tab-created", tab, null);
+                }
             });
 
-            return cdpId;
+            return tab;
         }
     }
 
@@ -373,6 +412,13 @@ public final class AgentBrowserManager {
             if (removed == null) {
                 return false;
             }
+            if (!TextUtils.isEmpty(removed.tabKey)) {
+                tabsByKey.remove(removed.tabKey);
+                if (removed.tabKey.equals(activeWcvTabKey)) {
+                    wcvVisible = false;
+                    activeWcvTabKey = null;
+                }
+            }
             if (cdpTargetId.equals(selectedTargetId)) {
                 selectedTargetId = tabsByCdpId.isEmpty()
                         ? null
@@ -380,9 +426,11 @@ public final class AgentBrowserManager {
             }
         }
         runOnMain(() -> {
+            emitWcvHostEvent("agent-tab-closed", removed, null);
             destroyTabViewOnMain(removed);
             if (getTabCount() == 0) {
                 expanded = false;
+                wcvVisible = false;
             }
             syncOverlayStateOnMain();
         });
@@ -561,6 +609,211 @@ public final class AgentBrowserManager {
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Side Panel WebContentsView (WCV) Bridge API
+    // -------------------------------------------------------------------------
+
+    public JSONObject wcvAcquire(String tabKey, String initialUrl) {
+        AgentTab tab = resolveTabByKey(tabKey);
+        if (tab == null) {
+            tab = createTabInternal(
+                    TextUtils.isEmpty(initialUrl) ? "about:blank" : initialUrl,
+                    tabKey,
+                    false);
+        }
+        return buildWcvTabState(tab);
+    }
+
+    public JSONObject wcvShow(String tabKey, int leftPx, int topPx, int widthPx, int heightPx) {
+        AgentTab tab = resolveTabByKey(tabKey);
+        if (tab != null) {
+            synchronized (tabLock) {
+                selectedTargetId = tab.cdpTargetId;
+            }
+            activeWcvTabKey = tab.tabKey;
+        } else {
+            activeWcvTabKey = tabKey;
+        }
+        wcvLeftPx = Math.max(0, leftPx);
+        wcvTopPx = Math.max(0, topPx);
+        wcvWidthPx = Math.max(0, widthPx);
+        wcvHeightPx = Math.max(0, heightPx);
+        wcvVisible = true;
+        runOnMain(this::syncOverlayStateOnMain);
+        return buildWcvTabState(tab);
+    }
+
+    public void wcvSetBounds(String tabKey, int leftPx, int topPx, int widthPx, int heightPx) {
+        if (!TextUtils.isEmpty(tabKey) && activeWcvTabKey != null && !tabKey.equals(activeWcvTabKey)) {
+            return;
+        }
+        wcvLeftPx = Math.max(0, leftPx);
+        wcvTopPx = Math.max(0, topPx);
+        wcvWidthPx = Math.max(0, widthPx);
+        wcvHeightPx = Math.max(0, heightPx);
+        runOnMain(this::syncOverlayStateOnMain);
+    }
+
+    public void wcvHide(String tabKey) {
+        if (TextUtils.isEmpty(tabKey) || tabKey.equals(activeWcvTabKey)) {
+            wcvVisible = false;
+            runOnMain(this::syncOverlayStateOnMain);
+        }
+    }
+
+    public void wcvSetOverlayActive(String tabKey, boolean active) {
+        if (TextUtils.isEmpty(tabKey) || tabKey.equals(activeWcvTabKey)) {
+            wcvOverlayActive = active;
+            runOnMain(this::syncOverlayStateOnMain);
+        }
+    }
+
+    public void wcvNavigate(String tabKey, String url) {
+        AgentTab tab = resolveTabByKey(tabKey);
+        if (tab == null || tab.webView == null) {
+            return;
+        }
+        String navUrl = normalizeRequestedUrl(url);
+        runOnMain(() -> {
+            if (tab.webView != null) {
+                tab.currentUrl = navUrl;
+                tab.webView.loadUrl(navUrl);
+            }
+        });
+    }
+
+    public void wcvControl(String tabKey, String action) {
+        AgentTab tab = resolveTabByKey(tabKey);
+        if (tab == null || tab.webView == null || TextUtils.isEmpty(action)) {
+            return;
+        }
+        runOnMain(() -> {
+            WebView wv = tab.webView;
+            if (wv == null) {
+                return;
+            }
+            switch (action) {
+                case "back":
+                    if (wv.canGoBack()) {
+                        wv.goBack();
+                    }
+                    break;
+                case "forward":
+                    if (wv.canGoForward()) {
+                        wv.goForward();
+                    }
+                    break;
+                case "reload":
+                    wv.reload();
+                    break;
+                case "stop":
+                    wv.stopLoading();
+                    break;
+                default:
+                    break;
+            }
+        });
+    }
+
+    public void wcvDispose(String tabKey) {
+        AgentTab tab = resolveTabByKey(tabKey);
+        if (tab != null && !TextUtils.isEmpty(tab.cdpTargetId)) {
+            closeTab(tab.cdpTargetId);
+        }
+    }
+
+    private AgentTab resolveTabByKey(String tabKey) {
+        if (TextUtils.isEmpty(tabKey)) {
+            return null;
+        }
+        synchronized (tabLock) {
+            AgentTab direct = tabsByKey.get(tabKey);
+            if (direct != null) {
+                return direct;
+            }
+            // Strip Side Panel prefixes like "builtin-browser:<scope>:browser__cdp_<id>" or "browser__cdp_<id>"
+            int cdpIdx = tabKey.indexOf("browser__cdp_");
+            if (cdpIdx >= 0) {
+                String tail = tabKey.substring(cdpIdx + "browser__cdp_".length());
+                int colon = tail.indexOf(':');
+                String cdpId = colon >= 0 ? tail.substring(0, colon) : tail;
+                AgentTab byCdp = tabsByCdpId.get(cdpId);
+                if (byCdp != null) {
+                    byCdp.tabKey = tabKey;
+                    tabsByKey.put(tabKey, byCdp);
+                    return byCdp;
+                }
+            }
+            if (tabsByCdpId.containsKey(tabKey)) {
+                AgentTab byCdp = tabsByCdpId.get(tabKey);
+                if (byCdp != null) {
+                    byCdp.tabKey = tabKey;
+                    tabsByKey.put(tabKey, byCdp);
+                }
+                return byCdp;
+            }
+            return null;
+        }
+    }
+
+    private JSONObject buildWcvTabState(AgentTab tab) {
+        JSONObject out = new JSONObject();
+        if (tab == null) {
+            return out;
+        }
+        try {
+            out.put("webContentsId", tab.webContentsId);
+            out.put("targetId", tab.cdpTargetId != null ? tab.cdpTargetId : "");
+            out.put("tabKey", tab.tabKey != null ? tab.tabKey : "");
+            out.put("url", tab.currentUrl != null ? tab.currentUrl : "about:blank");
+            out.put("title", tab.currentTitle != null ? tab.currentTitle : "");
+            out.put("isLoading", tab.loading);
+            final boolean[] navFlags = {false, false};
+            if (tab.webView != null) {
+                runOnMainSync(() -> {
+                    if (tab.webView != null) {
+                        navFlags[0] = tab.webView.canGoBack();
+                        navFlags[1] = tab.webView.canGoForward();
+                    }
+                });
+            }
+            out.put("canGoBack", navFlags[0]);
+            out.put("canGoForward", navFlags[1]);
+        } catch (Exception ignored) {
+        }
+        return out;
+    }
+
+    private void emitWcvHostEvent(String type, AgentTab tab, JSONObject extra) {
+        WebView uiWv = uiWebViewRef.get();
+        if (uiWv == null || tab == null) {
+            return;
+        }
+        try {
+            JSONObject ev = extra != null ? new JSONObject(extra.toString()) : new JSONObject();
+            ev.put("type", type);
+            ev.put("tabKey", tab.tabKey != null ? tab.tabKey : "");
+            ev.put("targetId", tab.cdpTargetId != null ? tab.cdpTargetId : "");
+            ev.put("webContentsId", tab.webContentsId);
+            ev.put("url", tab.currentUrl != null ? tab.currentUrl : "about:blank");
+            ev.put("title", tab.currentTitle != null ? tab.currentTitle : "");
+            ev.put("isLoading", tab.loading);
+            if (tab.webView != null) {
+                ev.put("canGoBack", tab.webView.canGoBack());
+                ev.put("canGoForward", tab.webView.canGoForward());
+            }
+            final String js = "try{window.__agWcvHost&&window.__agWcvHost.onEvent("
+                    + ev.toString() + ");}catch(_){}";
+            runOnMain(() -> {
+                WebView target = uiWebViewRef.get();
+                if (target != null) {
+                    target.evaluateJavascript(js, null);
+                }
+            });
+        } catch (Exception ignored) {
+        }
+    }
+
     /**
      * Destroys all active agent WebView tabs cleanly. Called on service shutdown.
      */
@@ -569,9 +822,13 @@ public final class AgentBrowserManager {
         synchronized (tabLock) {
             snapshot = new ArrayList<>(tabsByCdpId.values());
             tabsByCdpId.clear();
+            tabsByKey.clear();
             selectedTargetId = null;
         }
         expanded = false;
+        wcvVisible = false;
+        wcvOverlayActive = false;
+        activeWcvTabKey = null;
         runOnMain(() -> {
             for (AgentTab tab : snapshot) {
                 destroyTabViewOnMain(tab);
@@ -858,7 +1115,8 @@ public final class AgentBrowserManager {
     private void syncOverlayStateOnMain() {
         FrameLayout hostRoot = hostRootRef.get();
         int count = getTabCount();
-        AgentTab selected = getSelectedTab();
+        AgentTab wcvTab = wcvVisible ? resolveTabByKey(activeWcvTabKey) : null;
+        AgentTab selected = wcvTab != null ? wcvTab : getSelectedTab();
 
         if (agentContainer != null && webViewStage != null) {
             synchronized (tabLock) {
@@ -882,11 +1140,26 @@ public final class AgentBrowserManager {
                     toolbarView.setVisibility(View.VISIBLE);
                 }
                 if (hostRoot != null) {
+                    agentContainer.setLayoutParams(new FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT));
                     agentContainer.bringToFront();
                     if (floatingPill != null) {
                         floatingPill.setVisibility(View.GONE);
                     }
                 }
+            } else if (wcvVisible && !wcvOverlayActive && wcvTab != null
+                    && wcvWidthPx > 2 && wcvHeightPx > 2 && hostRoot != null) {
+                // Docked directly inside Antigravity's Side Panel browser viewport rectangle
+                agentContainer.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+                if (toolbarView != null) {
+                    toolbarView.setVisibility(View.GONE);
+                }
+                FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(wcvWidthPx, wcvHeightPx);
+                lp.leftMargin = wcvLeftPx;
+                lp.topMargin = wcvTopPx;
+                agentContainer.setLayoutParams(lp);
+                agentContainer.bringToFront();
             } else {
                 // Keep VISIBLE at index 0 behind opaque main UI WebView so Chromium keeps painting frames,
                 // while blocking focus so agent pages cannot steal keyboard input from main chat.
@@ -894,11 +1167,16 @@ public final class AgentBrowserManager {
                 if (toolbarView != null) {
                     toolbarView.setVisibility(View.GONE);
                 }
-                if (hostRoot != null && hostRoot.indexOfChild(agentContainer) > 0) {
-                    hostRoot.removeView(agentContainer);
-                    hostRoot.addView(agentContainer, 0, new FrameLayout.LayoutParams(
+                if (hostRoot != null) {
+                    FrameLayout.LayoutParams full = new FrameLayout.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT));
+                            ViewGroup.LayoutParams.MATCH_PARENT);
+                    if (hostRoot.indexOfChild(agentContainer) > 0) {
+                        hostRoot.removeView(agentContainer);
+                        hostRoot.addView(agentContainer, 0, full);
+                    } else {
+                        agentContainer.setLayoutParams(full);
+                    }
                 }
             }
         }
@@ -911,7 +1189,10 @@ public final class AgentBrowserManager {
         }
 
         if (floatingPill != null) {
-            if (count > 0 && !expanded && hostRoot != null) {
+            // Hide the fallback floating pill when the Side Panel web host is attached
+            boolean showFallbackPill = count > 0 && !expanded && !wcvVisible
+                    && hostRoot != null && uiWebViewRef.get() == null;
+            if (showFallbackPill) {
                 floatingPill.setText(count == 1 ? "Agent Browser" : ("Agent Browser (" + count + ")"));
                 floatingPill.setVisibility(View.VISIBLE);
                 floatingPill.bringToFront();
@@ -922,12 +1203,12 @@ public final class AgentBrowserManager {
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private AgentTab createTabViewOnMain(String token, WebView existingWebView) {
+    private AgentTab createTabViewOnMain(String token, int webContentsId, WebView existingWebView) {
         ensureViewsCreated(activityRef.get());
         WebView wv = existingWebView != null ? existingWebView : new WebView(overlayContext);
         configureAgentWebSettings(wv);
 
-        AgentTab tab = new AgentTab(token, wv);
+        AgentTab tab = new AgentTab(token, webContentsId, wv);
         wv.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
@@ -935,6 +1216,7 @@ public final class AgentBrowserManager {
                 if (!isInternalMarkerUrl(url)) {
                     tab.currentUrl = url != null ? url : "about:blank";
                     updateToolbarIfSelected(tab);
+                    emitWcvHostEvent("did-start-loading", tab, null);
                 }
             }
 
@@ -948,6 +1230,12 @@ public final class AgentBrowserManager {
                         tab.currentTitle = title;
                     }
                     updateToolbarIfSelected(tab);
+                    emitWcvHostEvent("did-navigate", tab, null);
+                    if (!tab.domReady) {
+                        tab.domReady = true;
+                        emitWcvHostEvent("dom-ready", tab, null);
+                    }
+                    emitWcvHostEvent("did-stop-loading", tab, null);
                 }
             }
 
@@ -979,6 +1267,7 @@ public final class AgentBrowserManager {
                 if (title != null && !isInternalMarkerUrl(view.getUrl())) {
                     tab.currentTitle = title;
                     updateToolbarIfSelected(tab);
+                    emitWcvHostEvent("page-title-updated", tab, null);
                 }
             }
 
@@ -987,9 +1276,10 @@ public final class AgentBrowserManager {
                 if (resultMsg == null || !(resultMsg.obj instanceof WebView.WebViewTransport)) {
                     return false;
                 }
-                String childToken = "agy-" + tokenSeq.incrementAndGet();
+                int childSeq = tokenSeq.incrementAndGet();
+                String childToken = "agy-" + childSeq;
                 Set<String> knownBefore = Collections.emptySet();
-                AgentTab child = createTabViewOnMain(childToken, null);
+                AgentTab child = createTabViewOnMain(childToken, childSeq, null);
                 WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
                 transport.setWebView(child.webView);
                 resultMsg.sendToTarget();
@@ -998,11 +1288,16 @@ public final class AgentBrowserManager {
                     String cdpId = awaitNewCdpTargetId(knownBefore, null);
                     if (!TextUtils.isEmpty(cdpId)) {
                         child.cdpTargetId = cdpId;
+                        child.tabKey = "browser__cdp_" + cdpId;
                         synchronized (tabLock) {
                             tabsByCdpId.put(cdpId, child);
+                            tabsByKey.put(child.tabKey, child);
                             selectedTargetId = cdpId;
                         }
-                        runOnMain(AgentBrowserManager.this::syncOverlayStateOnMain);
+                        runOnMain(() -> {
+                            syncOverlayStateOnMain();
+                            emitWcvHostEvent("agent-tab-created", child, null);
+                        });
                     }
                 });
                 return true;

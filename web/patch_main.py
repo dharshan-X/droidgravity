@@ -126,11 +126,79 @@ def patch_main(file_path):
     if not picker_ok:
         return False
 
+    content, sp_changed = patch_side_panel_browser(content)
+    changed = changed or sp_changed
+
     if changed or "externalStorageDir" in content:
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
 
     return True
+
+
+def patch_side_panel_browser(content):
+    if "__agWcvBrowser" in content:
+        print("[web-patch] Side Panel browser already patched in main.js")
+        return content, False
+
+    did_change = False
+
+    # 1. Hook Gpb() so __agWcvBrowser is recognized alongside electronNative.wcvBrowser
+    gpb_old = "a?.electronNative?.wcvBrowser)&&typeof a.acquire===\"function\""
+    gpb_new = "a?.electronNative?.wcvBrowser||a?.__agWcvBrowser)&&typeof a.acquire===\"function\""
+    if gpb_old in content:
+        content = content.replace(gpb_old, gpb_new, 1)
+        did_change = True
+        print("[web-patch] Hooked __agWcvBrowser into Gpb() in main.js")
+    else:
+        print("[web-patch] Gpb() pattern not matched in main.js", file=sys.stderr)
+
+    # 2. Enable browserAuxPane, browserSubagentWebview, and browserSubagentWebviewUx when window.Android is present
+    lob_m = re.search(
+        r'customFlag:"enable-hub-builtin-browser"\},feature:[A-Za-z0-9_$]+\?([A-Za-z0-9_$]+):!1',
+        content,
+    )
+    if lob_m:
+        lob_id = lob_m.group(1)
+        bap_old = "browserAuxPane:{feature:!1,"
+        bap_new = f'browserAuxPane:{{feature:(typeof window!=="undefined"&&window.Android?{lob_id}:!1),'
+        if bap_old in content:
+            content = content.replace(bap_old, bap_new, 1)
+            did_change = True
+            print(f"[web-patch] Enabled browserAuxPane for Android (pane={lob_id})")
+    else:
+        print("[web-patch] browserAuxPane LOb identifier not matched in main.js", file=sys.stderr)
+
+    for flag_key in ("browserSubagentWebview", "browserSubagentWebviewUx"):
+        old_s = f"{flag_key}:{{feature:!1,"
+        new_s = f'{flag_key}:{{feature:(typeof window!=="undefined"&&window.Android?!0:!1),'
+        if old_s in content:
+            content = content.replace(old_s, new_s, 1)
+            did_change = True
+            print(f"[web-patch] Enabled {flag_key} for Android")
+
+    # 3. Register Side Panel browser opener hook in ahd() so CDP agent tabs open inside the Side Panel
+    opener_m = re.search(
+        r'([A-Za-z0-9_$]+)=xU\(\);(\(0,([A-Za-z0-9_$]+)\.useEffect\)\(\(\)=>fZa\()',
+        content,
+    )
+    if opener_m:
+        open_fn = opener_m.group(1)
+        react_var = opener_m.group(3)
+        injected_effect = (
+            f"{open_fn}=xU();"
+            f"(0,{react_var}.useEffect)(()=>{{window.__agWcvHost?.registerSidePanelOpener?.((tid,u)=>{{try{{"
+            f"{open_fn}({{type:\"customView\",customView:{{customPaneKey:\"browser\",serializedInputs:JSON.stringify({{tabId:tid,initialUrl:u||\"about:blank\"}})}}}},tid,{{keepOpen:!0}})"
+            f"}}catch(_){{}}}})}},[{open_fn}]);"
+            f"{opener_m.group(2)}"
+        )
+        content = content[:opener_m.start()] + injected_effect + content[opener_m.end():]
+        did_change = True
+        print(f"[web-patch] Registered Side Panel browser opener in main.js (fn={open_fn})")
+    else:
+        print("[web-patch] Side Panel opener hook not matched in main.js", file=sys.stderr)
+
+    return content, did_change
 
 if __name__ == "__main__":
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), "main.js")

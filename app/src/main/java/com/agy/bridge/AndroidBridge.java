@@ -20,6 +20,7 @@ import java.security.SecureRandom;
  */
 public final class AndroidBridge {
 
+    private final Context appContext;
     private final UiBridge ui = new UiBridge();
     private final ThemeBridge themeBridge;
     private final EngineBridge engine;
@@ -29,10 +30,10 @@ public final class AndroidBridge {
 
     public AndroidBridge(Context context, RuntimeManager runtime,
                          ShizukuBridge shizuku, ThemeManager theme) {
-        Context appContext = context.getApplicationContext();
+        this.appContext = context.getApplicationContext();
         this.themeBridge = new ThemeBridge(theme);
         this.engine = new EngineBridge(runtime);
-        this.config = new EngineConfigJson(appContext, runtime, engine, shizuku, themeBridge);
+        this.config = new EngineConfigJson(this.appContext, runtime, engine, shizuku, themeBridge);
     }
 
     /** Host activity, used to dismiss the native splash once the UI has painted. */
@@ -135,6 +136,74 @@ public final class AndroidBridge {
             com.agy.ui.download.FileDownloader.handleBlobData(
                     act, base64Data, filename, mimeType);
         }
+    }
+
+    @JavascriptInterface
+    public String wcvAcquire(String token, String tabKey, String initialUrl) {
+        if (!matchesNativeBridgeToken(token)) {
+            return "{}";
+        }
+        return com.agy.browser.AgentBrowserManager.getInstance(appContext)
+                .wcvAcquire(tabKey, initialUrl).toString();
+    }
+
+    @JavascriptInterface
+    public String wcvShow(String token, String tabKey, int leftPx, int topPx, int widthPx, int heightPx) {
+        if (!matchesNativeBridgeToken(token)) {
+            return "{}";
+        }
+        return com.agy.browser.AgentBrowserManager.getInstance(appContext)
+                .wcvShow(tabKey, leftPx, topPx, widthPx, heightPx).toString();
+    }
+
+    @JavascriptInterface
+    public void wcvSetBounds(String token, String tabKey, int leftPx, int topPx, int widthPx, int heightPx) {
+        if (!matchesNativeBridgeToken(token)) {
+            return;
+        }
+        com.agy.browser.AgentBrowserManager.getInstance(appContext)
+                .wcvSetBounds(tabKey, leftPx, topPx, widthPx, heightPx);
+    }
+
+    @JavascriptInterface
+    public void wcvHide(String token, String tabKey) {
+        if (!matchesNativeBridgeToken(token)) {
+            return;
+        }
+        com.agy.browser.AgentBrowserManager.getInstance(appContext).wcvHide(tabKey);
+    }
+
+    @JavascriptInterface
+    public void wcvSetOverlayActive(String token, String tabKey, boolean active) {
+        if (!matchesNativeBridgeToken(token)) {
+            return;
+        }
+        com.agy.browser.AgentBrowserManager.getInstance(appContext)
+                .wcvSetOverlayActive(tabKey, active);
+    }
+
+    @JavascriptInterface
+    public void wcvNavigate(String token, String tabKey, String url) {
+        if (!matchesNativeBridgeToken(token)) {
+            return;
+        }
+        com.agy.browser.AgentBrowserManager.getInstance(appContext).wcvNavigate(tabKey, url);
+    }
+
+    @JavascriptInterface
+    public void wcvControl(String token, String tabKey, String action) {
+        if (!matchesNativeBridgeToken(token)) {
+            return;
+        }
+        com.agy.browser.AgentBrowserManager.getInstance(appContext).wcvControl(tabKey, action);
+    }
+
+    @JavascriptInterface
+    public void wcvDispose(String token, String tabKey) {
+        if (!matchesNativeBridgeToken(token)) {
+            return;
+        }
+        com.agy.browser.AgentBrowserManager.getInstance(appContext).wcvDispose(tabKey);
     }
 
     private boolean matchesNativeBridgeToken(String candidate) {
