@@ -106,6 +106,21 @@ def pack_binaries(core_bin_path: str, loader_path: str, shims_dir: str, dest_bin
             shutil.copyfile(src_dex, dst_dex)
             installed.append("rish_shizuku.dex")
 
+    # Node shim and Android WebView CDP chrome-devtools-mcp server
+    src_agy_node = os.path.join(shims_dir, "system", "agy_node.sh")
+    if os.path.isfile(src_agy_node):
+        dst_node = os.path.join(dest_bin_dir, "agy-node")
+        shutil.copyfile(src_agy_node, dst_node)
+        make_exec(dst_node)
+        installed.append("agy-node")
+
+    src_cdp_mcp = os.path.join(shims_dir, "browser", "chrome_devtools_mcp.py")
+    if os.path.isfile(src_cdp_mcp):
+        dst_mcp = os.path.join(dest_bin_dir, "chrome-devtools-mcp.py")
+        shutil.copyfile(src_cdp_mcp, dst_mcp)
+        make_exec(dst_mcp)
+        installed.append("chrome-devtools-mcp.py")
+
     return installed
 
 def main():

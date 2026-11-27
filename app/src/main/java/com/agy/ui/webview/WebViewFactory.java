@@ -38,7 +38,7 @@ public final class WebViewFactory {
 
         WebSettingsFactory.configure(view);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT && BuildConfig.DEBUG) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             WebView.setWebContentsDebuggingEnabled(true);
         }
         return view;

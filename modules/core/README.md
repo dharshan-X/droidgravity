@@ -59,15 +59,16 @@ modules/core/
 │   ├── AGENTS.md               # Системный промпт и правила окружения
 │   └── *.pbtxt                 # Начальные protobuf-состояния онбординга
 ├── shims/                      # Системные и браузерные заглушки
-│   ├── browser/                # xdg-open и браузерные делегаторы (chrome, open, etc.)
+│   ├── browser/                # xdg-open, браузерные делегаторы и chrome_devtools_mcp.py (CDP MCP-сервер)
 │   ├── privilege/              # rish.sh (интерфейс к Shizuku ADB-оболочке)
-│   └── system/                 # open_helper.sh, xdg_open.sh (URL-диспетчер)
+│   └── system/                 # agy_node.sh, open_helper.sh, xdg_open.sh
 └── tests/                      # Модульные тесты
     ├── test_extractor.py       # Тесты распаковки и archive_detector
     ├── test_elf_validator.py   # Тесты ELF-заголовков и архитектуры
     ├── test_manifest.py        # Тесты генерации и проверки манифеста
     ├── test_bundle.py          # Тесты layout, etc-конфигов и сборки через assemble.py
     ├── test_shims.py           # Тесты парсинга URL в xdg-open и браузерных делегаторов
+    ├── test_chrome_devtools_mcp.py # Интеграционные тесты MCP/CDP для chrome-devtools-mcp.py
     └── run_all.sh              # Скрипт синтаксической проверки и запуска тестов
 ```
 
@@ -146,7 +147,7 @@ modules/core/
 
 | Каталог | Содержимое | Назначение |
 | :--- | :--- | :--- |
-| `bin/` | `liblanguage_server.so`, `libloader.so`, `ld-linux-aarch64.so.1`, `xdg-open`, `chrome`, `rish`... | Исполняемые бинарники, загрузчик glibc и shell-шимы |
+| `bin/` | `liblanguage_server.so`, `libloader.so`, `ld-linux-aarch64.so.1`, `xdg-open`, `chrome`, `rish`, `agy-node`, `chrome-devtools-mcp.py`... | Исполняемые бинарники, загрузчик glibc, shell-шимы и CDP MCP-сервер |
 | `lib/` | `libc.so.6`, `libm.so.6`, `libdl.so.2`, `libpthread.so.0`, `liblse_compat.so`, `ld-linux-aarch64.so.1` | Зависимости glibc и LSE-атомиков под AArch64 |
 | `etc/` | `hosts`, `resolv.conf`, `nsswitch.conf` | Сетевые и DNS-конфигурации для работы сетевого стека glibc |
 | `certs/` | `ca-certificates.crt` | Корневые SSL/TLS сертификаты для Go TLS рантайма |
@@ -168,6 +169,7 @@ bash modules/core/tests/run_all.sh
 4. Unit-тесты манифеста и обнаружения повреждений (`test_manifest.py`).
 5. Unit-тесты сборки бандла, layout и etc-конфигов (`test_bundle.py`).
 6. Unit-тесты URL-парсинга в xdg-open и браузерных шимов (`test_shims.py`).
+7. Интеграционные тесты MCP JSON-RPC и WebSocket CDP (`test_chrome_devtools_mcp.py`).
 
 ### Сквозной E2E-пайплайн верификации
 ```bash

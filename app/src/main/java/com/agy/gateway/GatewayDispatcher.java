@@ -20,6 +20,8 @@ public final class GatewayDispatcher {
     private final com.agy.log.CommandHistory commandHistory;
     private final ExecHandler execHandler;
 
+    private final com.agy.browser.AgentBrowserManager agentBrowserManager;
+
     public GatewayDispatcher(Context context, LogRingBuffer logBuffer) {
         this.notificationHandler = new NotificationHandler(context);
         this.browserHandler = new BrowserHandler(context);
@@ -29,6 +31,7 @@ public final class GatewayDispatcher {
         this.logBuffer = logBuffer;
         this.commandHistory = new com.agy.log.CommandHistory();
         this.execHandler = new ExecHandler(context, this.commandHistory, logBuffer);
+        this.agentBrowserManager = com.agy.browser.AgentBrowserManager.getInstance(context);
     }
 
     public JSONObject dispatch(String command, JSONObject payload) {
@@ -41,6 +44,10 @@ public final class GatewayDispatcher {
                 return notificationHandler.handle(payload);
             case "open_url":
                 return browserHandler.handle(payload);
+            case "cdp_info":
+                return agentBrowserManager.getStatusJson();
+            case "cdp_tab":
+                return agentBrowserManager.handleGatewayTabCommand(payload);
             case "wakelock":
                 return powerHandler.handle(payload);
             case "clipboard":

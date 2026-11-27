@@ -125,6 +125,8 @@ graph TD
 | `vibrate` | `DeviceHandler` | Тактильный отклик (Haptic Feedback) заданной длительности. |
 | `toast` | `DeviceHandler` | Отображение нативных всплывающих сообщений (Toast). |
 | `exec` | `ExecHandler` | Выполнение команд в шелле (`/system/bin/sh` или повышенный `rish` через Shizuku) с таймаутом и захватом потоков. |
+| `cdp_info` | `AgentBrowserManager` | Получение статуса CDP-прокси, активного порта и списка изолированных вкладок браузера агента. |
+| `cdp_tab` | `AgentBrowserManager` | Управление вкладками браузера агента (`list`, `new`, `close`, `activate`, `show`, `hide`, `navigate`, `dialog`). |
 | `/gateway/status` | `SystemGatewayServer` | Проверка состояния шлюза (health check). |
 | `/gateway/logs` | `SystemGatewayServer` | Чтение последних строк системного лога из кольцевого буфера памяти. |
 | `/gateway/commands` | `SystemGatewayServer` | История выполненных шлюзом команд и их статусов. |
@@ -146,6 +148,20 @@ graph TD
   Это необходимо для того, чтобы системный Window Splash на Android 12+ (API 31) отображал правильный цвет фона и логотип в соответствии с выбранной темой приложения, а не системной темой дня/ночи.
 - **`LauncherIconSwitcher`**:
   Переключает включенное состояние (`setComponentEnabledSetting`) между активностями с флагом `DONT_KILL_APP` строго в момент ухода приложения в фон (`onStop`), предотвращая сброс сессии пользователя.
+
+### 2.6. Браузер агентов и CDP-прокси (`com.agy.browser`)
+
+Обеспечивает встроенные браузерные возможности агентов Antigravity (`/browser`, `chrome_devtools`) поверх системного Android WebView без бандлинга Chromium:
+
+- **`AgentBrowserManager`**:
+  - Создает и отслеживает изолированные агентские `WebView`-вкладки по явному allowlist-реестру CDP target ID, полностью исключая основной UI `WebView` Antigravity.
+  - В свернутом виде контейнер удерживается видимым на индексе `0` под основным непрозрачным WebView (`FOCUS_BLOCK_DESCENDANTS`), чтобы композитор Chromium продолжал рендеринг для `Page.captureScreenshot` и событий ввода.
+  - При открытых вкладках отображает компактную перетаскиваемую кнопку `Agent Browser` для вызова интерактивного оверлея (навигация, логин, CAPTCHA).
+- **`CdpProxyServer`**:
+  - Слушает на `127.0.0.1:<ephemeralPort>` и проксирует HTTP-эндпоинты (`/json/version`, `/json`, `/json/list`, `/json/new`, `/json/close/<id>`, `/json/activate/<id>`), `/devtools/page/<id>` WebSocket и `/devtools/browser` WebSocket к абстрактному Unix-сокету `@webview_devtools_remote_<pid>`.
+  - Атомарно создает и удаляет `$HOME/.config/google-chrome/DevToolsActivePort` и `$HOME/.config/chromium/DevToolsActivePort` для детектирования браузера в `language_server`.
+- **`CoreEnvironment`**:
+  - Экспортирует `CHROME_DEVTOOLS_MCP_JS` на `runtime/bin/chrome-devtools-mcp.py`, запускаемый через шим `runtime/bin/agy-node` на встроенном Python 3.
 
 ---
 

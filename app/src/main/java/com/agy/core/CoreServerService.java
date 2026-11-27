@@ -30,10 +30,16 @@ public final class CoreServerService extends Service {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private volatile boolean destroyed;
 
+    private com.agy.browser.AgentBrowserManager agentBrowserManager;
+    private com.agy.browser.CdpProxyServer cdpProxyServer;
+
     @Override
     public void onCreate() {
         super.onCreate();
         runtime = new RuntimeManager(this);
+        agentBrowserManager = com.agy.browser.AgentBrowserManager.getInstance(this);
+        cdpProxyServer = new com.agy.browser.CdpProxyServer(this, agentBrowserManager);
+        cdpProxyServer.start();
         logBuffer = new com.agy.log.LogRingBuffer();
         gatewayServer = new com.agy.gateway.SystemGatewayServer(this, logBuffer, com.agy.BuildConfig.GATEWAY_PORT);
         gatewayServer.start();
@@ -132,6 +138,12 @@ public final class CoreServerService extends Service {
     @Override
     public void onDestroy() {
         stopBackgroundDaemon();
+        if (cdpProxyServer != null) {
+            cdpProxyServer.stop();
+        }
+        if (agentBrowserManager != null) {
+            agentBrowserManager.destroyAll();
+        }
         if (gatewayServer != null) {
             gatewayServer.stop();
         }

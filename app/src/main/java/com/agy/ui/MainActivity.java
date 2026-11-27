@@ -167,6 +167,7 @@ public class MainActivity extends Activity
         splash.setRetryListener(this::retryCore);
         rootLayout.addView(splash.view(), ViewParams.full());
         splash.loadInitial();
+        com.agy.browser.AgentBrowserManager.getInstance(this).attachActivity(this, rootLayout);
 
         splash.installExitAnimation(this);
 
@@ -254,6 +255,7 @@ public class MainActivity extends Activity
         if (androidBridge != null) {
             androidBridge.setActivity(null);
         }
+        com.agy.browser.AgentBrowserManager.getInstance(this).detachActivity(this);
         if (rootLayout != null) {
             rootLayout.removeAllViews();
         }
@@ -313,6 +315,7 @@ public class MainActivity extends Activity
         super.onResume();
         activityResumed = true;
         activeActivity = this;
+        com.agy.browser.AgentBrowserManager.getInstance(this).attachActivity(this, rootLayout);
         if (webViewHost != null) {
             AppLifecycle.resume(webViewHost.getWebView());
         }
@@ -336,6 +339,9 @@ public class MainActivity extends Activity
 
     @Override
     public void onBackPressed() {
+        if (com.agy.browser.AgentBrowserManager.getInstance(this).handleBackPressed()) {
+            return;
+        }
         if (!BackNavigator.handle(webViewHost != null ? webViewHost.getWebView() : null)) {
             super.onBackPressed();
         }

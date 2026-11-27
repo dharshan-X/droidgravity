@@ -64,6 +64,8 @@ public final class CoreEnvironment {
         // Configure browser and desktop environment so core OAuth/open tools find the browser
         File xdgOpen = new File(bin, "xdg-open");
         env.put("BROWSER", xdgOpen.getAbsolutePath());
+        File chromeDevToolsMcp = new File(bin, "chrome-devtools-mcp.py");
+        env.put("CHROME_DEVTOOLS_MCP_JS", chromeDevToolsMcp.getAbsolutePath());
         env.put("DISPLAY", ":0");
         env.put("WAYLAND_DISPLAY", "wayland-0");
         env.put("XDG_CURRENT_DESKTOP", "X-Generic");
