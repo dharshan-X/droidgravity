@@ -17,10 +17,11 @@
     },
     {
       "name": "syscalls",
-      "description": "Android seccomp faccessat2/fchmodat2 retargeting",
+      "description": "Android seccomp faccessat2/fchmodat2 retargeting & sidecar unsandboxing",
       "expected": {
         "faccessat2": 1,
-        "fchmodat2": 1
+        "fchmodat2": 1,
+        "sidecar_unsandbox": 1
       }
     },
     {

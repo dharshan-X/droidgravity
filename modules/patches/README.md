@@ -27,6 +27,8 @@ modules/patches/
     ├── test_byte_replacer.py
     ├── test_elf_scanner.py
     ├── test_pclntab_scanner.py
+    ├── test_pty_shell.py
+    ├── test_sidecar_unsandbox.py
     ├── test_full_pipeline.py
     └── run_all.sh
 ```
@@ -41,6 +43,7 @@ modules/patches/
 | **gates** | `enterprise_auth` | `EnterpriseAuthValidator.Validate` | Принудительная установка флага валидности |
 | **syscalls** | `faccessat` | `syscall.faccessat2` (sys_439: `0xd28036e0`) | Ретаргетинг на `faccessat` (sys_48: `0xd2800600`) |
 | **syscalls** | `fchmodat` | `syscall.fchmodat2` (sys_452: `0xd2803880`) | Ретаргетинг на `fchmodat` (sys_53: `0xd28006a0`) |
+| **syscalls** | `sidecar_unsandbox` | `(*SidecarManager).sandboxPolicy` (стек-чек `ldr x16, [x28,#16]`) | Возвращает `nil` (`mov x0, xzr; ret` — `e0 03 1f aa c0 03 5f d6`), отключая `exebox` Linux sandbox для sidecars |
 | **sigill** | `sigill_handler` | Вызов `rt_sigaction` в рантайме Go | Игнорирование сигнала `SIGILL` (4) для сохранения обработчика `liblse_compat.so` |
 | **resolv** | `resolv_redirect` | Строка `/etc/resolv.conf` (16 байт) | Замена на `etc//resolv.conf` без изменения длины |
 | **failfast** | `crash_suppressor` | ARMv8.0-A CPU feature check (`0x7701180`) & preinit atomic (`0x7765c60`) | Branch `b +0x64` в обход проверки LSE/CRC/AES и замена `ldaddal` на `ldr`/`str` для полной совместимости с процессорами ARMv8.0-A (Snapdragon 660 и др., без аппаратного LSE) |

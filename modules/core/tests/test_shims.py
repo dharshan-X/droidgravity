@@ -85,5 +85,97 @@ class TestShims(unittest.TestCase):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
+    def test_07_agy_node_runs_existing_node(self):
+        agy_node = os.path.join(MODULE_ROOT, "shims", "system", "agy_node.sh")
+        tmp = tempfile.mkdtemp()
+        try:
+            prefix = os.path.join(tmp, "usr")
+            os.makedirs(os.path.join(prefix, "bin"), exist_ok=True)
+            node_bin = os.path.join(prefix, "bin", "node")
+            with open(node_bin, "w", encoding="utf-8") as f:
+                f.write("#!/bin/sh\necho \"NODE_ARGS=$*\"\n")
+            os.chmod(node_bin, 0o755)
+
+            env = os.environ.copy()
+            env["PREFIX"] = prefix
+            res = subprocess.run(
+                ["sh", agy_node, "/tmp/sidecar.mjs", "--flag"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+            )
+            self.assertEqual(res.returncode, 0)
+            self.assertIn("NODE_ARGS=/tmp/sidecar.mjs --flag", res.stdout)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_08_agy_node_auto_installs_nodejs_via_pkg(self):
+        agy_node = os.path.join(MODULE_ROOT, "shims", "system", "agy_node.sh")
+        tmp = tempfile.mkdtemp()
+        try:
+            prefix = os.path.join(tmp, "usr")
+            os.makedirs(os.path.join(prefix, "bin"), exist_ok=True)
+            os.makedirs(os.path.join(prefix, "var", "lib", "pkg", "index"), exist_ok=True)
+            log_file = os.path.join(tmp, "pkg.log")
+
+            pkg_bin = os.path.join(prefix, "bin", "pkg")
+            with open(pkg_bin, "w", encoding="utf-8") as f:
+                f.write(
+                    "#!/bin/sh\n"
+                    f"echo \"$*\" >> \"{log_file}\"\n"
+                    "if [ \"$1\" = \"update\" ]; then\n"
+                    "  touch \"$PREFIX/var/lib/pkg/index/repo.test.Packages\"\n"
+                    "elif [ \"$1\" = \"install\" ] && [ \"$2\" = \"-y\" ] && [ \"$3\" = \"nodejs\" ]; then\n"
+                    "  cat > \"$PREFIX/bin/node\" <<'EOF'\n"
+                    "#!/bin/sh\n"
+                    "echo \"INSTALLED_NODE_RUN=$*\"\n"
+                    "EOF\n"
+                    "  chmod +x \"$PREFIX/bin/node\"\n"
+                    "fi\n"
+                )
+            os.chmod(pkg_bin, 0o755)
+
+            env = os.environ.copy()
+            env["PREFIX"] = prefix
+            env["TMPDIR"] = tmp
+            res = subprocess.run(
+                ["sh", agy_node, "/tmp/swarm.mjs", "--port", "9000"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+            )
+            self.assertEqual(res.returncode, 0, msg=res.stderr)
+            self.assertIn("INSTALLED_NODE_RUN=/tmp/swarm.mjs --port 9000", res.stdout)
+            with open(log_file, "r", encoding="utf-8") as f:
+                lines = [line.strip() for line in f.readlines()]
+            self.assertEqual(lines, ["update", "install -y nodejs"])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_09_agy_node_fails_cleanly_without_pkg_or_node(self):
+        agy_node = os.path.join(MODULE_ROOT, "shims", "system", "agy_node.sh")
+        tmp = tempfile.mkdtemp()
+        try:
+            prefix = os.path.join(tmp, "usr")
+            os.makedirs(prefix, exist_ok=True)
+            with open(os.path.join(prefix, ".installed"), "w", encoding="utf-8") as f:
+                f.write("1\n")
+
+            env = os.environ.copy()
+            env["PREFIX"] = prefix
+            res = subprocess.run(
+                ["sh", agy_node, "/tmp/swarm.mjs"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+            )
+            self.assertEqual(res.returncode, 127)
+            self.assertIn("node binary not installed", res.stderr)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
 if __name__ == "__main__":
     unittest.main()

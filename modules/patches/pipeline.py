@@ -21,6 +21,7 @@ import cli_gate
 import enterprise_auth
 import faccessat
 import fchmodat
+import sidecar_unsandbox
 import sigill_handler
 import resolv_redirect
 import crash_suppressor
@@ -32,6 +33,7 @@ ACTIVE_MODULES = [
     enterprise_auth,
     faccessat,
     fchmodat,
+    sidecar_unsandbox,
     sigill_handler,
     resolv_redirect,
     crash_suppressor,

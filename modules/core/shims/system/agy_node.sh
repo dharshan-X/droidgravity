@@ -28,8 +28,8 @@ for arg in "$@"; do
 done
 
 export PREFIX
-export LD_LIBRARY_PATH="$PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export PATH="$PREFIX/bin${SELF_DIR:+:$SELF_DIR}:/system/bin"
+export LD_LIBRARY_PATH="$PREFIX/lib"
+export PATH="$PREFIX/bin${SELF_DIR:+:$SELF_DIR}:/system/bin:/usr/bin:/bin"
 [ -f "$PREFIX/etc/tls/cert.pem" ] && export SSL_CERT_FILE="$PREFIX/etc/tls/cert.pem"
 unset LD_PRELOAD
 
@@ -50,6 +50,52 @@ if [ "$IS_PY" -eq 1 ]; then
 fi
 
 NODE_BIN="$PREFIX/bin/node"
+if [ -x "$NODE_BIN" ]; then
+  exec "$NODE_BIN" "$@"
+fi
+
+# Wait briefly if EnvInstaller is still extracting the bootstrap environment
+TRIES=0
+while [ -d "$PREFIX" ] && [ ! -f "$PREFIX/.installed" ] && [ ! -f "$PREFIX/bin/pkg" ] && [ ! -x "$NODE_BIN" ] && [ "$TRIES" -lt 80 ]; do
+  sleep 0.25 2>/dev/null || sleep 1
+  TRIES=$((TRIES + 1))
+done
+
+if [ ! -x "$NODE_BIN" ] && [ -f "$PREFIX/bin/pkg" ]; then
+  export TMPDIR="${TMPDIR:-$PREFIX/tmp}"
+  mkdir -p "$TMPDIR" 2>/dev/null || true
+  LOCK_DIR="$TMPDIR/agy-node-install.lock"
+
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    if [ ! -x "$NODE_BIN" ]; then
+      echo "agy-node: $NODE_BIN missing; installing nodejs via pkg..." >&2
+      PKG_INDEX_DIR="$PREFIX/var/lib/pkg/index"
+      HAS_INDEX=0
+      for idx in "$PKG_INDEX_DIR"/*.Packages; do
+        if [ -f "$idx" ]; then
+          HAS_INDEX=1
+          break
+        fi
+      done
+
+      if [ -x "$PREFIX/bin/bash" ]; then
+        [ "$HAS_INDEX" -eq 0 ] && "$PREFIX/bin/bash" "$PREFIX/bin/pkg" update </dev/null >&2
+        "$PREFIX/bin/bash" "$PREFIX/bin/pkg" install -y nodejs </dev/null >&2
+      elif [ -x "$PREFIX/bin/pkg" ]; then
+        [ "$HAS_INDEX" -eq 0 ] && "$PREFIX/bin/pkg" update </dev/null >&2
+        "$PREFIX/bin/pkg" install -y nodejs </dev/null >&2
+      fi
+    fi
+    rmdir "$LOCK_DIR" 2>/dev/null || true
+  else
+    WAIT_TRIES=0
+    while [ -d "$LOCK_DIR" ] && [ ! -x "$NODE_BIN" ] && [ "$WAIT_TRIES" -lt 240 ]; do
+      sleep 0.25 2>/dev/null || sleep 1
+      WAIT_TRIES=$((WAIT_TRIES + 1))
+    done
+  fi
+fi
+
 if [ -x "$NODE_BIN" ]; then
   exec "$NODE_BIN" "$@"
 fi
