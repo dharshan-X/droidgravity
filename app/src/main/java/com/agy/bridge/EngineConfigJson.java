@@ -1,6 +1,7 @@
 package com.agy.bridge;
 
 import android.content.Context;
+import android.os.Environment;
 
 import com.agy.runtime.RuntimeConfig;
 import com.agy.runtime.RuntimeManager;
@@ -41,6 +42,7 @@ public final class EngineConfigJson {
             o.put("filesDir", appContext.getFilesDir().getAbsolutePath());
             o.put("runtimeDir", runtime.getRuntimeDir().getAbsolutePath());
             o.put("home", appContext.getFilesDir().getAbsolutePath());
+            o.put("externalStorageDir", Environment.getExternalStorageDirectory().getAbsolutePath());
             o.put("tmpDir", appContext.getCacheDir().getAbsolutePath());
             o.put("appDataDir", runtime.getAppDataDir().getAbsolutePath());
             o.put("shizukuAvailable", shizuku.isAvailable());
