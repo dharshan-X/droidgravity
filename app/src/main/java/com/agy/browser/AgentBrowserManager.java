@@ -624,7 +624,8 @@ public final class AgentBrowserManager {
         return buildWcvTabState(tab);
     }
 
-    public JSONObject wcvShow(String tabKey, int leftPx, int topPx, int widthPx, int heightPx) {
+    public JSONObject wcvShow(String tabKey, int leftX100, int topX100,
+                              int widthX100, int heightX100, int vpWidthX100, int vpHeightX100) {
         AgentTab tab = resolveTabByKey(tabKey);
         if (tab != null) {
             synchronized (tabLock) {
@@ -634,24 +635,38 @@ public final class AgentBrowserManager {
         } else {
             activeWcvTabKey = tabKey;
         }
-        wcvLeftPx = Math.max(0, leftPx);
-        wcvTopPx = Math.max(0, topPx);
-        wcvWidthPx = Math.max(0, widthPx);
-        wcvHeightPx = Math.max(0, heightPx);
+        updateWcvBoundsFromCss(leftX100, topX100, widthX100, heightX100, vpWidthX100, vpHeightX100);
         wcvVisible = true;
         runOnMain(this::syncOverlayStateOnMain);
         return buildWcvTabState(tab);
     }
 
-    public void wcvSetBounds(String tabKey, int leftPx, int topPx, int widthPx, int heightPx) {
+    public void wcvSetBounds(String tabKey, int leftX100, int topX100,
+                             int widthX100, int heightX100, int vpWidthX100, int vpHeightX100) {
         if (!TextUtils.isEmpty(tabKey) && activeWcvTabKey != null && !tabKey.equals(activeWcvTabKey)) {
             return;
         }
-        wcvLeftPx = Math.max(0, leftPx);
-        wcvTopPx = Math.max(0, topPx);
-        wcvWidthPx = Math.max(0, widthPx);
-        wcvHeightPx = Math.max(0, heightPx);
+        updateWcvBoundsFromCss(leftX100, topX100, widthX100, heightX100, vpWidthX100, vpHeightX100);
         runOnMain(this::syncOverlayStateOnMain);
+    }
+
+    private void updateWcvBoundsFromCss(int leftX100, int topX100,
+                                        int widthX100, int heightX100,
+                                        int vpWidthX100, int vpHeightX100) {
+        WebView uiWv = uiWebViewRef.get();
+        FrameLayout root = hostRootRef.get();
+        int hostW = uiWv != null && uiWv.getWidth() > 0 ? uiWv.getWidth()
+                : (root != null ? root.getWidth() : 0);
+        int hostH = uiWv != null && uiWv.getHeight() > 0 ? uiWv.getHeight()
+                : (root != null ? root.getHeight() : 0);
+        float density = appContext.getResources().getDisplayMetrics().density;
+        float scaleX = (hostW > 0 && vpWidthX100 > 0) ? ((float) hostW * 100f / vpWidthX100) : density;
+        float scaleY = (hostH > 0 && vpHeightX100 > 0) ? ((float) hostH * 100f / vpHeightX100) : scaleX;
+
+        wcvLeftPx = Math.max(0, Math.round((leftX100 / 100f) * scaleX));
+        wcvTopPx = Math.max(0, Math.round((topX100 / 100f) * scaleY));
+        wcvWidthPx = Math.max(0, Math.round((widthX100 / 100f) * scaleX));
+        wcvHeightPx = Math.max(0, Math.round((heightX100 / 100f) * scaleY));
     }
 
     public void wcvHide(String tabKey) {
@@ -1156,6 +1171,7 @@ public final class AgentBrowserManager {
                     toolbarView.setVisibility(View.GONE);
                 }
                 FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(wcvWidthPx, wcvHeightPx);
+                lp.gravity = Gravity.TOP | Gravity.START;
                 lp.leftMargin = wcvLeftPx;
                 lp.topMargin = wcvTopPx;
                 agentContainer.setLayoutParams(lp);

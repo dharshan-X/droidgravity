@@ -11,23 +11,32 @@
   var pendingOpenQueue = [];
 
   function getToken() {
-    return (window.__APP_CONFIG__ && window.__APP_CONFIG__.blobBridgeToken) || "";
+    return (
+      window.__AG_NATIVE_BRIDGE_TOKEN__ ||
+      (window.__APP_CONFIG__ && window.__APP_CONFIG__.blobBridgeToken) ||
+      ""
+    );
   }
 
   function hasNative() {
     return !!(window.Android && typeof window.Android.wcvAcquire === "function");
   }
 
-  function scaleBounds(boundsCss) {
-    var dpr = window.devicePixelRatio || 1;
+  function mapBounds(boundsCss) {
     var b = boundsCss || {};
     var x = typeof b.x === "number" ? b.x : (b.left || 0);
     var y = typeof b.y === "number" ? b.y : (b.top || 0);
+    var vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+    var dpr = window.devicePixelRatio || 1;
     return {
-      l: Math.max(0, Math.round(x * dpr)),
-      t: Math.max(0, Math.round(y * dpr)),
-      w: Math.max(0, Math.round((b.width || 0) * dpr)),
-      h: Math.max(0, Math.round((b.height || 0) * dpr))
+      x: Number(x) || 0,
+      y: Number(y) || 0,
+      w: Math.max(0, Number(b.width) || 0),
+      h: Math.max(0, Number(b.height) || 0),
+      vw: Number(vw) || 0,
+      vh: Number(vh) || 0,
+      dpr: Number(dpr) || 1
     };
   }
 
@@ -61,14 +70,32 @@
     },
     show: function (tabKey, boundsCss) {
       if (!hasNative()) return Promise.resolve({ webContentsId: 0 });
-      var s = scaleBounds(boundsCss);
-      var res = window.Android.wcvShow(getToken(), String(tabKey || ""), s.l, s.t, s.w, s.h);
+      var s = mapBounds(boundsCss);
+      var res = window.Android.wcvShow(
+        getToken(),
+        String(tabKey || ""),
+        Math.round(s.x * 100),
+        Math.round(s.y * 100),
+        Math.round(s.w * 100),
+        Math.round(s.h * 100),
+        Math.round(s.vw * 100),
+        Math.round(s.vh * 100)
+      );
       return Promise.resolve(safeParse(res, { webContentsId: 0 }));
     },
     setBounds: function (tabKey, boundsCss) {
       if (!hasNative()) return;
-      var s = scaleBounds(boundsCss);
-      window.Android.wcvSetBounds(getToken(), String(tabKey || ""), s.l, s.t, s.w, s.h);
+      var s = mapBounds(boundsCss);
+      window.Android.wcvSetBounds(
+        getToken(),
+        String(tabKey || ""),
+        Math.round(s.x * 100),
+        Math.round(s.y * 100),
+        Math.round(s.w * 100),
+        Math.round(s.h * 100),
+        Math.round(s.vw * 100),
+        Math.round(s.vh * 100)
+      );
     },
     hide: function (tabKey) {
       if (!hasNative()) return;

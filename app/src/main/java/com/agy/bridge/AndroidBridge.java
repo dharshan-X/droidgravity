@@ -148,21 +148,24 @@ public final class AndroidBridge {
     }
 
     @JavascriptInterface
-    public String wcvShow(String token, String tabKey, int leftPx, int topPx, int widthPx, int heightPx) {
+    public String wcvShow(String token, String tabKey, int leftX100, int topX100,
+                          int widthX100, int heightX100, int vpWidthX100, int vpHeightX100) {
         if (!matchesNativeBridgeToken(token)) {
             return "{}";
         }
         return com.agy.browser.AgentBrowserManager.getInstance(appContext)
-                .wcvShow(tabKey, leftPx, topPx, widthPx, heightPx).toString();
+                .wcvShow(tabKey, leftX100, topX100, widthX100, heightX100, vpWidthX100, vpHeightX100)
+                .toString();
     }
 
     @JavascriptInterface
-    public void wcvSetBounds(String token, String tabKey, int leftPx, int topPx, int widthPx, int heightPx) {
+    public void wcvSetBounds(String token, String tabKey, int leftX100, int topX100,
+                             int widthX100, int heightX100, int vpWidthX100, int vpHeightX100) {
         if (!matchesNativeBridgeToken(token)) {
             return;
         }
         com.agy.browser.AgentBrowserManager.getInstance(appContext)
-                .wcvSetBounds(tabKey, leftPx, topPx, widthPx, heightPx);
+                .wcvSetBounds(tabKey, leftX100, topX100, widthX100, heightX100, vpWidthX100, vpHeightX100);
     }
 
     @JavascriptInterface
