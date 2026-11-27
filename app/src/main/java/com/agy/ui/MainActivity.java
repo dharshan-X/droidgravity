@@ -1,7 +1,9 @@
 package com.agy.ui;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.net.Uri;
@@ -15,6 +17,7 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
+import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebView;
@@ -39,6 +42,7 @@ import com.agy.ui.webview.AgyWebChromeClient;
 import com.agy.ui.webview.DesktopModePrefs;
 import com.agy.ui.webview.WebViewHost;
 import com.agy.util.SensitiveDataRedactor;
+import com.agy.util.TrustedCoreOrigin;
 import com.agy.util.ViewParams;
 
 /**
@@ -47,11 +51,15 @@ import com.agy.util.ViewParams;
  * All logic lives in the helper classes; this only wires them and polls.
  */
 public class MainActivity extends Activity
-        implements WebViewHost.Listener, AgyWebChromeClient.FileChooserCallback {
+        implements WebViewHost.Listener, AgyWebChromeClient.FileChooserCallback,
+        AgyWebChromeClient.PermissionRequestCallback {
 
     private static final String TAG = "MainActivity";
     private static final int REQUEST_STORAGE = 100;
+    private static final int REQUEST_MEDIA_PERMISSIONS = 101;
     private static final int REQUEST_FILE_CHOOSER = 1002;
+    private static final String PERMS_PREFS = "agy_perms";
+    private static final String KEY_MIC_PROMPTED = "mic_prompted";
     private static final long SPLASH_TIMEOUT_MS = 60000;
     private static final long POLL_STARTUP_INTERVAL_MS = 50;
     private static final long POLL_READY_INTERVAL_MS = 1000;
@@ -59,6 +67,7 @@ public class MainActivity extends Activity
     public static volatile MainActivity activeActivity;
 
     private ValueCallback<Uri[]> filePathCallback;
+    private PermissionRequest pendingPermissionRequest;
 
     private ThemeManager themeManager;
     private OAuthManager oauthManager;
@@ -145,7 +154,7 @@ public class MainActivity extends Activity
         shizukuBridge = new ShizukuBridge(this);
         androidBridge = new AndroidBridge(this, runtimeManager, shizukuBridge, themeManager);
         androidBridge.setActivity(this);
-        webViewHost = new WebViewHost(this, themeManager, oauthManager, androidBridge, this);
+        webViewHost = new WebViewHost(this, themeManager, oauthManager, androidBridge, this, this);
         webViewHost.setListener(this);
 
         rootLayout = new FrameLayout(this);
@@ -163,6 +172,7 @@ public class MainActivity extends Activity
 
         splashDeadline = System.currentTimeMillis() + SPLASH_TIMEOUT_MS;
         requestStoragePermissions();
+        requestAudioPermissionIfReady();
 
         startCoreService();
     }
@@ -234,6 +244,13 @@ public class MainActivity extends Activity
             activeActivity = null;
         }
         AppLifecycle.destroy(handler);
+        if (pendingPermissionRequest != null) {
+            try {
+                pendingPermissionRequest.deny();
+            } catch (Throwable ignored) {
+            }
+            pendingPermissionRequest = null;
+        }
         if (androidBridge != null) {
             androidBridge.setActivity(null);
         }
@@ -300,6 +317,7 @@ public class MainActivity extends Activity
             AppLifecycle.resume(webViewHost.getWebView());
         }
         refreshTheme();
+        requestAudioPermissionIfReady();
         handler.removeCallbacks(pollServer);
         handler.post(pollServer);
     }
@@ -350,6 +368,98 @@ public class MainActivity extends Activity
                 }, REQUEST_STORAGE);
             }
         }
+    }
+
+    private boolean hasStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                return android.os.Environment.isExternalStorageManager();
+            } catch (Throwable ignored) {
+                return false;
+            }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            return checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+                    && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+        }
+        return true;
+    }
+
+    private void requestAudioPermissionIfReady() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return;
+        }
+        if (!hasStoragePermission()) {
+            return;
+        }
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        SharedPreferences prefs = getSharedPreferences(PERMS_PREFS, MODE_PRIVATE);
+        if (prefs.getBoolean(KEY_MIC_PROMPTED, false)) {
+            return;
+        }
+        prefs.edit().putBoolean(KEY_MIC_PROMPTED, true).apply();
+        requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQUEST_MEDIA_PERMISSIONS);
+    }
+
+    @Override
+    public void onPermissionRequest(final PermissionRequest request) {
+        if (request == null) {
+            return;
+        }
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                int expectedPort = runtimeManager != null ? runtimeManager.getHttpsPort() : -1;
+                if (!TrustedCoreOrigin.matches(request.getOrigin(), expectedPort)) {
+                    Log.w(TAG, "Denying WebView permission request from untrusted origin: "
+                            + SensitiveDataRedactor.safeUrl(request.getOrigin() != null ? request.getOrigin().toString() : null));
+                    request.deny();
+                    return;
+                }
+                String[] requested = request.getResources();
+                if (requested == null || requested.length == 0) {
+                    request.deny();
+                    return;
+                }
+                List<String> supported = new ArrayList<>();
+                List<String> missingPerms = new ArrayList<>();
+                for (String res : requested) {
+                    if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(res)) {
+                        supported.add(res);
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                                && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
+                                && !missingPerms.contains(Manifest.permission.RECORD_AUDIO)) {
+                            missingPerms.add(Manifest.permission.RECORD_AUDIO);
+                        }
+                    } else if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(res)) {
+                        supported.add(res);
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                                && checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
+                                && !missingPerms.contains(Manifest.permission.CAMERA)) {
+                            missingPerms.add(Manifest.permission.CAMERA);
+                        }
+                    }
+                }
+                if (supported.isEmpty()) {
+                    request.deny();
+                    return;
+                }
+                if (missingPerms.isEmpty()) {
+                    request.grant(supported.toArray(new String[0]));
+                    return;
+                }
+                if (pendingPermissionRequest != null) {
+                    try {
+                        pendingPermissionRequest.deny();
+                    } catch (Throwable ignored) {
+                    }
+                }
+                pendingPermissionRequest = request;
+                requestPermissions(missingPerms.toArray(new String[0]), REQUEST_MEDIA_PERMISSIONS);
+            }
+        });
     }
 
     @Override
@@ -515,6 +625,45 @@ public class MainActivity extends Activity
         if (requestCode == com.agy.ui.download.FileDownloader.REQUEST_STORAGE_DOWNLOAD) {
             WebView wv = (webViewHost != null) ? webViewHost.getWebView() : null;
             com.agy.ui.download.FileDownloader.onPermissionResult(this, wv, requestCode, grantResults);
+            return;
+        }
+        if (requestCode == REQUEST_STORAGE) {
+            requestAudioPermissionIfReady();
+            return;
+        }
+        if (requestCode == REQUEST_MEDIA_PERMISSIONS) {
+            PermissionRequest req = pendingPermissionRequest;
+            pendingPermissionRequest = null;
+            if (req != null) {
+                List<String> granted = new ArrayList<>();
+                String[] requested = req.getResources();
+                if (requested != null) {
+                    for (String res : requested) {
+                        if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(res)
+                                && (Build.VERSION.SDK_INT < Build.VERSION_CODES.M
+                                || checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)) {
+                            granted.add(res);
+                        } else if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(res)
+                                && (Build.VERSION.SDK_INT < Build.VERSION_CODES.M
+                                || checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)) {
+                            granted.add(res);
+                        }
+                    }
+                }
+                if (!granted.isEmpty()) {
+                    req.grant(granted.toArray(new String[0]));
+                } else {
+                    req.deny();
+                }
+            }
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M
+                    || checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                if (webViewHost != null && webViewHost.getWebView() != null) {
+                    webViewHost.getWebView().evaluateJavascript(
+                            "try{navigator.mediaDevices&&navigator.mediaDevices.dispatchEvent(new Event('devicechange'));}catch(_){}",
+                            null);
+                }
+            }
         }
     }
 }

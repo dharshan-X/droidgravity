@@ -4,13 +4,14 @@ import android.net.Uri;
 import android.os.Message;
 import android.util.Log;
 import android.webkit.ConsoleMessage;
+import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 
 import com.agy.util.SensitiveDataRedactor;
 
-/** Routes console output to logcat, popups to PopupWindowHandler, and file chooser to callback. */
+/** Routes console output to logcat, popups to PopupWindowHandler, file chooser, and WebView permission requests to callbacks. */
 public final class AgyWebChromeClient extends WebChromeClient {
 
     private static final String TAG = "WebViewHost";
@@ -20,16 +21,27 @@ public final class AgyWebChromeClient extends WebChromeClient {
                                   FileChooserParams fileChooserParams);
     }
 
+    public interface PermissionRequestCallback {
+        void onPermissionRequest(PermissionRequest request);
+    }
+
     private final PopupWindowHandler popupHandler;
     private final FileChooserCallback fileChooserCallback;
+    private final PermissionRequestCallback permissionRequestCallback;
 
-    public AgyWebChromeClient(PopupWindowHandler popupHandler, FileChooserCallback fileChooserCallback) {
+    public AgyWebChromeClient(PopupWindowHandler popupHandler, FileChooserCallback fileChooserCallback,
+                              PermissionRequestCallback permissionRequestCallback) {
         this.popupHandler = popupHandler;
         this.fileChooserCallback = fileChooserCallback;
+        this.permissionRequestCallback = permissionRequestCallback;
+    }
+
+    public AgyWebChromeClient(PopupWindowHandler popupHandler, FileChooserCallback fileChooserCallback) {
+        this(popupHandler, fileChooserCallback, null);
     }
 
     public AgyWebChromeClient(PopupWindowHandler popupHandler) {
-        this(popupHandler, null);
+        this(popupHandler, null, null);
     }
 
     @Override
@@ -64,5 +76,14 @@ public final class AgyWebChromeClient extends WebChromeClient {
             return fileChooserCallback.onShowFileChooser(webView, filePathCallback, fileChooserParams);
         }
         return super.onShowFileChooser(webView, filePathCallback, fileChooserParams);
+    }
+
+    @Override
+    public void onPermissionRequest(PermissionRequest request) {
+        if (permissionRequestCallback != null && request != null) {
+            permissionRequestCallback.onPermissionRequest(request);
+            return;
+        }
+        super.onPermissionRequest(request);
     }
 }

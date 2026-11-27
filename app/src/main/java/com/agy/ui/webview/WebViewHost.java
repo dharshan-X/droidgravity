@@ -29,14 +29,15 @@ public final class WebViewHost {
     private Listener listener;
 
     public WebViewHost(Context context, ThemeManager theme, OAuthManager oauth,
-                       AndroidBridge bridge, AgyWebChromeClient.FileChooserCallback fileChooserCallback) {
+                       AndroidBridge bridge, AgyWebChromeClient.FileChooserCallback fileChooserCallback,
+                       AgyWebChromeClient.PermissionRequestCallback permissionRequestCallback) {
         this.context = context;
         this.theme = theme;
         this.oauth = oauth;
         this.bridge = bridge;
         this.webView = WebViewFactory.create(context, bridge, theme);
         this.webView.setWebChromeClient(new AgyWebChromeClient(
-                new PopupWindowHandler(context, oauth), fileChooserCallback));
+                new PopupWindowHandler(context, oauth), fileChooserCallback, permissionRequestCallback));
         this.webView.setWebViewClient(new AgyWebViewClient(
                 context, oauth, new LocalAssetServer(), bridge, new Listener() {
             @Override
@@ -60,8 +61,13 @@ public final class WebViewHost {
     }
 
     public WebViewHost(Context context, ThemeManager theme, OAuthManager oauth,
+                       AndroidBridge bridge, AgyWebChromeClient.FileChooserCallback fileChooserCallback) {
+        this(context, theme, oauth, bridge, fileChooserCallback, null);
+    }
+
+    public WebViewHost(Context context, ThemeManager theme, OAuthManager oauth,
                        AndroidBridge bridge) {
-        this(context, theme, oauth, bridge, null);
+        this(context, theme, oauth, bridge, null, null);
     }
 
     public WebView getWebView() {
