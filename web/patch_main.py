@@ -68,7 +68,7 @@ def patch_main(file_path):
         hook_region_start = max(0, theme_idx - 500)
         hook_region = content[hook_region_start:theme_idx]
         ret_pattern = re.compile(
-            r'return\s+' + re.escape(react_id) + r'\.createElement\(' + re.escape(react_id) + r'\.Fragment,null,' + re.escape(react_id) + r'\.createElement\([A-Za-z0-9_$]+,\{title:"Appearance"\}'
+            r'return\s+' + re.escape(react_id) + r'\.createElement\(' + re.escape(react_id) + r'\.Fragment,null,' + re.escape(react_id) + r'\.createElement\([A-Za-z0-9_$]+,\{title:"Appearance"[\s,}]'
         )
         ret_match = ret_pattern.search(hook_region)
         if not ret_match:
@@ -177,7 +177,7 @@ def patch_side_panel_browser(content):
             did_change = True
             print(f"[web-patch] Enabled {flag_key} for Android")
 
-    # 3. Register Side Panel browser opener hook in ahd() so CDP agent tabs open inside the Side Panel
+    # 3. Register Side Panel browser opener hook so CDP agent tabs open inside the Side Panel
     opener_m = re.search(
         r'([A-Za-z0-9_$]+)=xU\(\);(\(0,([A-Za-z0-9_$]+)\.useEffect\)\(\(\)=>fZa\()',
         content,
@@ -196,7 +196,25 @@ def patch_side_panel_browser(content):
         did_change = True
         print(f"[web-patch] Registered Side Panel browser opener in main.js (fn={open_fn})")
     else:
-        print("[web-patch] Side Panel opener hook not matched in main.js", file=sys.stderr)
+        opener_v2 = re.search(
+            r'(,)([A-Za-z0-9_$]+=\(0,([A-Za-z0-9_$]+)\.useCallback\)\(\(\)=>\{[A-Za-z0-9_$]+\("header_plus_dropdown_new_browser_click"\);'
+            r'if\([^)]+\)[^;]+;\s*else if\([^)]+\)\{var [^;]+;([A-Za-z0-9_$]+)\(\{type:"customView",customView:\{customPaneKey:"browser")',
+            content,
+        )
+        if opener_v2:
+            react_var = opener_v2.group(3)
+            open_fn = opener_v2.group(4)
+            injected_effect = (
+                f",_agSpOpener=(0,{react_var}.useEffect)(()=>{{window.__agWcvHost?.registerSidePanelOpener?.((tid,u)=>{{try{{"
+                f"{open_fn}({{type:\"customView\",customView:{{customPaneKey:\"browser\",serializedInputs:JSON.stringify({{tabId:tid,initialUrl:u||\"about:blank\"}})}}}},tid,{{keepOpen:!0}})"
+                f"}}catch(_){{}}}})}},[{open_fn}])"
+                f",{opener_v2.group(2)}"
+            )
+            content = content[:opener_v2.start()] + injected_effect + content[opener_v2.end():]
+            did_change = True
+            print(f"[web-patch] Registered Side Panel browser opener in main.js (fn={open_fn})")
+        else:
+            print("[web-patch] Side Panel opener hook not matched in main.js", file=sys.stderr)
 
     return content, did_change
 

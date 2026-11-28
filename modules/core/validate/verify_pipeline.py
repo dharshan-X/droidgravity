@@ -30,7 +30,7 @@ import manifest_verifier
 
 def run_pipeline():
     print("=" * 60)
-    print("  ANTIGRAVITY NEW CORE VERIFICATION PIPELINE (v2.35.2)")
+    print("  ANTIGRAVITY NEW CORE VERIFICATION PIPELINE (v2.36.0)")
     print("=" * 60)
 
     # 1. Check specs
@@ -38,7 +38,7 @@ def run_pipeline():
     archive_path = os.path.join(CORE_DIR, "pristine", "language_server.tar.gz")
     assert os.path.isfile(archive_path), f"Missing archive: {archive_path}"
     
-    expected_archive_sha = "dd8cc971e05887e2fdab8ec7887d675f04fbd62aed1ad199d5f5789ddac46a72"
+    expected_archive_sha = "a8b9f8391b2cb0e4b70a1c20336ade00638c55c092d6bb588a0e14f260d59dbd"
     checksum_checker.verify_checksum(archive_path, expected_archive_sha)
     print("  [OK] Pristine archive SHA-256 match confirmed.")
 

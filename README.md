@@ -14,7 +14,7 @@
 
   [![Android](https://img.shields.io/badge/Android-7.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](https://android.com)
   [![Arch](https://img.shields.io/badge/ARM64-v8.0--A%2B-blue?style=flat-square)](https://arm.com)
-  [![Core](https://img.shields.io/badge/Antigravity_Core-2.35.2-blue?style=flat-square)](https://github.com/dharshan-X/droidgravity/releases)
+  [![Core](https://img.shields.io/badge/Antigravity_Core-2.36.0-blue?style=flat-square)](https://github.com/dharshan-X/droidgravity/releases)
   [![Release](https://img.shields.io/badge/App_Version-2.4.2-blueviolet?style=flat-square)](https://github.com/dharshan-X/droidgravity/releases)
   [![License](https://img.shields.io/badge/License-Apache_2.0-orange?style=flat-square)](LICENSE)
 
@@ -32,7 +32,7 @@
 
 ### Overview
 
-**DroidGravity** brings Google Antigravity (currently **Core v2.35.2**) directly to Android ARM64 mobile hardware, forked and extended from `werdio325-png/antigravity-android`.
+**DroidGravity** brings Google Antigravity (currently **Core v2.36.0**) directly to Android ARM64 mobile hardware, forked and extended from `werdio325-png/antigravity-android`.
 
 No PRoot, chroot, or virtualization overhead. DroidGravity runs **bare-metal inside native Android userspace (Bionic)** alongside a bundled glibc loader (`ld-linux-aarch64.so.1`), unleashing the full read/write speed of UFS storage and physical CPU cores. Driven by Gemini models, the agent inspects repositories, authors code across multiple files, compiles binaries, and runs tests completely on-device.
 
@@ -40,7 +40,7 @@ No PRoot, chroot, or virtualization overhead. DroidGravity runs **bare-metal ins
 
 ### Highlights
 
-* **Antigravity Core v2.35.2:** Bundles and binary-patches the upstream `aarch64` `language_server` (`2.35.2`) for Android seccomp, `/etc/resolv.conf`, PTY shell (`/bin/bash` -> `/bin///sh`), `SIGILL` preservation, and ARMv8.0-A CPU compatibility.
+* **Antigravity Core v2.36.0:** Bundles and binary-patches the upstream `aarch64` `language_server` (`2.36.0`) for Android seccomp, `/etc/resolv.conf`, PTY shell (`/bin/bash` -> `/bin///sh`), `SIGILL` preservation, and ARMv8.0-A CPU compatibility.
 * **Non-Destructive Mobile UI Override:** Extracts the genuine upstream Jetski Web UI directly from `language_server` at build time (`web/extract_upstream.py`) and layers mobile overrides on top (`web/override_html.py`, `web/patch_main.py`, `web/src/**`) instead of overwriting upstream with a stale static snapshot.
 * **Modular Core:** Clean separation into 6 standalone subsystems (`modules/*`) with independent test suites.
 * **Native Splash:** Canvas-based dot animation saving ~40 MB RAM with instant startup.

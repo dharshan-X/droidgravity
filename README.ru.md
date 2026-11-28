@@ -14,7 +14,7 @@
 
   [![Android](https://img.shields.io/badge/Android-7.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](https://android.com)
   [![Arch](https://img.shields.io/badge/ARM64-v8.0--A%2B-blue?style=flat-square)](https://arm.com)
-  [![Core](https://img.shields.io/badge/Antigravity_Core-2.35.2-blue?style=flat-square)](https://github.com/dharshan-X/droidgravity/releases)
+  [![Core](https://img.shields.io/badge/Antigravity_Core-2.36.0-blue?style=flat-square)](https://github.com/dharshan-X/droidgravity/releases)
   [![Release](https://img.shields.io/badge/Версия-2.4.2-blueviolet?style=flat-square)](https://github.com/dharshan-X/droidgravity/releases)
   [![License](https://img.shields.io/badge/Лицензия-Apache_2.0-orange?style=flat-square)](LICENSE)
 
@@ -32,7 +32,7 @@
 
 ### Обзор
 
-**DroidGravity** переносит Google Antigravity (**Core v2.35.2**) прямо на мобильные устройства Android ARM64 на базе `werdio325-png/antigravity-android`.
+**DroidGravity** переносит Google Antigravity (**Core v2.36.0**) прямо на мобильные устройства Android ARM64 на базе `werdio325-png/antigravity-android`.
 
 Никаких PRoot, chroot или накладных расходов виртуализации. DroidGravity исполняется **нативно в пространстве пользователя Android (Bionic)** с использованием встроенного загрузчика glibc (`ld-linux-aarch64.so.1`), раскрывая полную скорость физических ядер CPU и накопителей UFS.
 
@@ -40,7 +40,7 @@
 
 ### Ключевые изменения
 
-* **Ядро Antigravity v2.35.2:** Интегрирован и пропатчен бинарник `language_server` (`aarch64` v2.35.2) с обходом ограничений seccomp, `/etc/resolv.conf`, PTY-шелла (`/bin/bash` -> `/bin///sh`), `SIGILL` и поддержкой ARMv8.0-A.
+* **Ядро Antigravity v2.36.0:** Интегрирован и пропатчен бинарник `language_server` (`aarch64` v2.36.0) с обходом ограничений seccomp, `/etc/resolv.conf`, PTY-шелла (`/bin/bash` -> `/bin///sh`), `SIGILL` и поддержкой ARMv8.0-A.
 * **Наложение мобильного UI поверх оригинала (Override):** Вместо перезаписи старой копией, сборщик извлекает актуальный веб-бандл напрямую из `language_server` (`web/extract_upstream.py`) и накладывает мобильные патчи (`web/override_html.py`, `web/patch_main.py`, `web/src/**`).
 * **Модульная архитектура:** Разделение ядра на 6 изолированных подсистем (`modules/*`) с отдельными тестами.
 * **Нативный сплэш:** Отрисовка анимации точек на Canvas экономит ~40 МБ RAM и ускоряет запуск.
