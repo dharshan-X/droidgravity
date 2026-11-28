@@ -144,7 +144,7 @@ web/
 
 ### Инъекции во время загрузки (`AppHtmlInjector`)
 Перед передачей разметки в движок WebView, Java-класс `AppHtmlInjector` внедряет в `<head>`:
-- **Strict Content Security Policy (CSP)**: запрет небезопасных внешних фреймов и объектов, ограничение `worker-src 'self' blob:`.
+- **Strict Content Security Policy (CSP)**: запрет небезопасных внешних фреймов и объектов, разрешение локальных loopback HTTP/WS-подключений и фреймов (`localhost`, `127.0.0.1`) для сайдкаров, ограничение `worker-src 'self' blob:`.
 - **Глобальные параметры конфигурации**:
   - `window.__APP_CONFIG__` — JSON-параметры среды (версия, платформа, пути к воркспейсу).
   - `window.__AG_ENDPOINTS__` — адрес core-сервера (`core`, `core_http`, `enginePort`).

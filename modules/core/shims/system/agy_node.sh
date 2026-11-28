@@ -31,6 +31,9 @@ export PREFIX
 export LD_LIBRARY_PATH="$PREFIX/lib"
 export PATH="$PREFIX/bin${SELF_DIR:+:$SELF_DIR}:/system/bin:/usr/bin:/bin"
 [ -f "$PREFIX/etc/tls/cert.pem" ] && export SSL_CERT_FILE="$PREFIX/etc/tls/cert.pem"
+if [ -z "${OPENSSL_CONF:-}" ] || [ ! -r "$OPENSSL_CONF" ]; then
+  export OPENSSL_CONF="$PREFIX/etc/tls/openssl.cnf"
+fi
 unset LD_PRELOAD
 
 if [ "$IS_PY" -eq 1 ]; then

@@ -168,7 +168,7 @@ bash modules/core/tests/run_all.sh
 3. Unit-тесты заголовков ELF и архитектуры (`test_elf_validator.py`).
 4. Unit-тесты манифеста и обнаружения повреждений (`test_manifest.py`).
 5. Unit-тесты сборки бандла, layout и etc-конфигов (`test_bundle.py`).
-6. Unit-тесты URL-парсинга в xdg-open, браузерных шимов и автоустановки `nodejs` в `agy-node` (`test_shims.py`).
+6. Unit-тесты URL-парсинга в xdg-open, браузерных шимов и автоустановки `nodejs` / экспорта `OPENSSL_CONF` в `agy-node` (`test_shims.py`).
 7. Интеграционные тесты MCP JSON-RPC и WebSocket CDP (`test_chrome_devtools_mcp.py`).
 
 ### Сквозной E2E-пайплайн верификации

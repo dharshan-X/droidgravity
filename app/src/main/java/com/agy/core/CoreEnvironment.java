@@ -35,6 +35,7 @@ public final class CoreEnvironment {
         // does not exist on Android). Prefer the prefix bash, then the bridge in
         // runtime/bin, then Android's own sh.
         File prefix = new File(files, com.agy.install.EnvPaths.PREFIX_DIR);
+        env.put("OPENSSL_CONF", new File(prefix, "etc/tls/openssl.cnf").getAbsolutePath());
         File prefixBash = new File(prefix, com.agy.install.EnvPaths.BASH_REL);
         File runtimeBash = new File(bin, "bash");
         if (prefixBash.isFile() && prefixBash.canExecute()) {

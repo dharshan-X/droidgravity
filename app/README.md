@@ -103,7 +103,7 @@ graph TD
   - Перехватывает вызовы `shouldInterceptRequest` в `AgyWebViewClient` для Same-Origin адреса `https://127.0.0.1:<port>/*`.
   - Статические файлы (`files/web/*`) отдаются напрямую из локального кэша приложения в памяти, не нагружая Go-сервер ядра. RPC и веб-сокеты (`/exa.*`, `/jetski.*`, streaming) прозрачно пропускаются к ядру.
 - **`AppHtmlInjector`**:
-  - Внедряет в `<head>` веб-бандла строгую директиву Content-Security-Policy (CSP).
+  - Внедряет в `<head>` веб-бандла строгую директиву Content-Security-Policy (CSP), разрешая внешние HTTPS-ресурсы и локальные loopback HTTP/WS-подключения/фреймы (`localhost`, `127.0.0.1`) для встроенных сайдкаров, таких как Swarm.
   - Инициализирует глобальные объекты `window.__APP_CONFIG__`, `window.__AG_ENDPOINTS__`, `window.__AG_CSRF__` и одноразовый криптографический токен `blobBridgeToken`.
 - **Файловый пикер и загрузки (`FileDownloader`)**:
   - Обрабатывает загрузки обычных файлов и Base64 Blobs (`saveBlob`).
@@ -162,6 +162,7 @@ graph TD
   - Атомарно создает и удаляет `$HOME/.config/google-chrome/DevToolsActivePort` и `$HOME/.config/chromium/DevToolsActivePort` для детектирования браузера в `language_server`.
 - **`CoreEnvironment`**:
   - Экспортирует `CHROME_DEVTOOLS_MCP_JS` на `runtime/bin/chrome-devtools-mcp.py`, запускаемый через шим `runtime/bin/agy-node` на встроенном Python 3.
+  - Экспортирует `OPENSSL_CONF` на `$PREFIX/etc/tls/openssl.cnf` (и `SSL_CERT_FILE` на хранилище сертификатов рантайма), предотвращая ошибку инициализации OpenSSL/Node.js (`EACCES` / `exit status 13`) при наличии стороннего каталога Termux на устройстве.
 
 ---
 

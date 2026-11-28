@@ -10,6 +10,7 @@ import shutil
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 MODULE_ROOT = os.path.dirname(TESTS_DIR)
+MOCK_SH = "/system/bin/sh" if os.path.exists("/system/bin/sh") else "/bin/sh"
 
 class TestShims(unittest.TestCase):
     def setUp(self):
@@ -85,19 +86,25 @@ class TestShims(unittest.TestCase):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
+    def _make_mock_node_prefix(self, tmp: str, script: str) -> str:
+        prefix = os.path.join(tmp, "usr")
+        os.makedirs(os.path.join(prefix, "bin"), exist_ok=True)
+        node_bin = os.path.join(prefix, "bin", "node")
+        with open(node_bin, "w", encoding="utf-8") as f:
+            f.write(script)
+        os.chmod(node_bin, 0o755)
+        return prefix
+
     def test_07_agy_node_runs_existing_node(self):
         agy_node = os.path.join(MODULE_ROOT, "shims", "system", "agy_node.sh")
         tmp = tempfile.mkdtemp()
         try:
-            prefix = os.path.join(tmp, "usr")
-            os.makedirs(os.path.join(prefix, "bin"), exist_ok=True)
-            node_bin = os.path.join(prefix, "bin", "node")
-            with open(node_bin, "w", encoding="utf-8") as f:
-                f.write("#!/bin/sh\necho \"NODE_ARGS=$*\"\n")
-            os.chmod(node_bin, 0o755)
-
+            prefix = self._make_mock_node_prefix(
+                tmp, f"#!{MOCK_SH}\necho \"NODE_ARGS=$*\"\n"
+            )
             env = os.environ.copy()
             env["PREFIX"] = prefix
+            env["TMPDIR"] = tmp
             res = subprocess.run(
                 ["sh", agy_node, "/tmp/sidecar.mjs", "--flag"],
                 stdout=subprocess.PIPE,
@@ -105,7 +112,7 @@ class TestShims(unittest.TestCase):
                 text=True,
                 env=env,
             )
-            self.assertEqual(res.returncode, 0)
+            self.assertEqual(res.returncode, 0, msg=res.stderr)
             self.assertIn("NODE_ARGS=/tmp/sidecar.mjs --flag", res.stdout)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
@@ -122,13 +129,13 @@ class TestShims(unittest.TestCase):
             pkg_bin = os.path.join(prefix, "bin", "pkg")
             with open(pkg_bin, "w", encoding="utf-8") as f:
                 f.write(
-                    "#!/bin/sh\n"
+                    f"#!{MOCK_SH}\n"
                     f"echo \"$*\" >> \"{log_file}\"\n"
                     "if [ \"$1\" = \"update\" ]; then\n"
                     "  touch \"$PREFIX/var/lib/pkg/index/repo.test.Packages\"\n"
                     "elif [ \"$1\" = \"install\" ] && [ \"$2\" = \"-y\" ] && [ \"$3\" = \"nodejs\" ]; then\n"
                     "  cat > \"$PREFIX/bin/node\" <<'EOF'\n"
-                    "#!/bin/sh\n"
+                    f"#!{MOCK_SH}\n"
                     "echo \"INSTALLED_NODE_RUN=$*\"\n"
                     "EOF\n"
                     "  chmod +x \"$PREFIX/bin/node\"\n"
@@ -165,6 +172,7 @@ class TestShims(unittest.TestCase):
 
             env = os.environ.copy()
             env["PREFIX"] = prefix
+            env["TMPDIR"] = tmp
             res = subprocess.run(
                 ["sh", agy_node, "/tmp/swarm.mjs"],
                 stdout=subprocess.PIPE,
@@ -174,6 +182,61 @@ class TestShims(unittest.TestCase):
             )
             self.assertEqual(res.returncode, 127)
             self.assertIn("node binary not installed", res.stderr)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_10_agy_node_sets_openssl_conf_when_unset_or_unreadable(self):
+        agy_node = os.path.join(MODULE_ROOT, "shims", "system", "agy_node.sh")
+        tmp = tempfile.mkdtemp()
+        try:
+            prefix = self._make_mock_node_prefix(
+                tmp, f"#!{MOCK_SH}\necho \"OPENSSL_CONF=$OPENSSL_CONF\"\n"
+            )
+            expected = os.path.join(prefix, "etc", "tls", "openssl.cnf")
+            for initial in (None, os.path.join(tmp, "missing_openssl.cnf")):
+                env = os.environ.copy()
+                env["PREFIX"] = prefix
+                env["TMPDIR"] = tmp
+                if initial is None:
+                    env.pop("OPENSSL_CONF", None)
+                else:
+                    env["OPENSSL_CONF"] = initial
+                res = subprocess.run(
+                    ["sh", agy_node, "/tmp/sidecar.mjs"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env=env,
+                )
+                self.assertEqual(res.returncode, 0, msg=res.stderr)
+                self.assertIn(f"OPENSSL_CONF={expected}", res.stdout)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_11_agy_node_preserves_readable_openssl_conf(self):
+        agy_node = os.path.join(MODULE_ROOT, "shims", "system", "agy_node.sh")
+        tmp = tempfile.mkdtemp()
+        try:
+            prefix = self._make_mock_node_prefix(
+                tmp, f"#!{MOCK_SH}\necho \"OPENSSL_CONF=$OPENSSL_CONF\"\n"
+            )
+            custom_conf = os.path.join(tmp, "custom.cnf")
+            with open(custom_conf, "w", encoding="utf-8") as f:
+                f.write("# custom openssl conf\n")
+
+            env = os.environ.copy()
+            env["PREFIX"] = prefix
+            env["TMPDIR"] = tmp
+            env["OPENSSL_CONF"] = custom_conf
+            res = subprocess.run(
+                ["sh", agy_node, "/tmp/sidecar.mjs"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+            )
+            self.assertEqual(res.returncode, 0, msg=res.stderr)
+            self.assertIn(f"OPENSSL_CONF={custom_conf}", res.stdout)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

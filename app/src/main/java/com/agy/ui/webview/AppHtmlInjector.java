@@ -18,7 +18,8 @@ public final class AppHtmlInjector {
             + "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; "
             + "style-src 'self' 'unsafe-inline' https:; "
             + "img-src 'self' https: data: blob:; font-src 'self' https: data:; "
-            + "connect-src 'self' https: wss:; frame-src https: data: blob:; "
+            + "connect-src 'self' https: wss: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; "
+            + "frame-src https: http://localhost:* http://127.0.0.1:* data: blob:; "
             + "worker-src 'self' blob:; object-src 'none'; base-uri 'self'";
 
     private AppHtmlInjector() {

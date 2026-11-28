@@ -15,4 +15,13 @@ public final class TrustedCoreOrigin {
                 && uri.getUserInfo() == null
                 && uri.getPort() == expectedPort;
     }
+
+    /** Loopback HTTP origin for sidecar/preview subframes (not valid for main-frame bridge trust). */
+    public static boolean isLoopbackHttp(Uri uri) {
+        if (uri == null || !"http".equalsIgnoreCase(uri.getScheme()) || uri.getUserInfo() != null) {
+            return false;
+        }
+        String host = uri.getHost();
+        return "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host);
+    }
 }
