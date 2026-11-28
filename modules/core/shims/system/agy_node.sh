@@ -51,11 +51,13 @@ fi
 
 NODE_BIN="$PREFIX/bin/node"
 AGY_NODE_LOG="${TMPDIR:-$PREFIX/tmp}/agy-node.log"
+mkdir -p "$(dirname "$AGY_NODE_LOG")" 2>/dev/null || true
+: >> "$AGY_NODE_LOG" 2>/dev/null || AGY_NODE_LOG=/dev/null
 {
   echo "[$(date 2>/dev/null)] agy-node js: node=$NODE_BIN exists=$([ -x "$NODE_BIN" ] && echo yes || echo no) args=$*"
 } >> "$AGY_NODE_LOG" 2>/dev/null || true
 if [ -x "$NODE_BIN" ]; then
-  exec "$NODE_BIN" "$@"
+  exec "$NODE_BIN" "$@" 2>>"$AGY_NODE_LOG"
 fi
 
 # Wait briefly if EnvInstaller is still extracting the bootstrap environment
