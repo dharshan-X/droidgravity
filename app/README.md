@@ -99,9 +99,10 @@ graph TD
   2. Параллельно `CoreServerService` распаковывает ядро и ожидает готовности локального HTTPS порта (зонд `CoreReadyProbe`).
   3. После ответа порта `WebViewHost.loadApp()` инжектирует HTML и конфигурацию.
   4. Скрытие сплэша происходит только по сигналу первого рендера из JavaScript (`window.Android.onUiReady()`), исключая мерцание белого экрана.
-- **`LocalAssetServer`**:
-  - Перехватывает вызовы `shouldInterceptRequest` в `AgyWebViewClient` для Same-Origin адреса `https://127.0.0.1:<port>/*`.
+- **`LocalAssetServer` & `LoopbackSidecarProxy`**:
+  - `LocalAssetServer` перехватывает вызовы `shouldInterceptRequest` в `AgyWebViewClient` для Same-Origin адреса `https://127.0.0.1:<port>/*`.
   - Статические файлы (`files/web/*`) отдаются напрямую из локального кэша приложения в памяти, не нагружая Go-сервер ядра. RPC и веб-сокеты (`/exa.*`, `/jetski.*`, streaming) прозрачно пропускаются к ядру.
+  - `LoopbackSidecarProxy` перехватывает `GET`/`HEAD`-запросы сайдкаров (`http://localhost:<port>` / `http://127.0.0.1:<port>` с параметром `?token=...`), сохраняет в памяти токен и session cookie порта и прокидывает их в подресурсы (`/styles.css`, `/app.js`, `/preload.js`, `/api/*`), обходя кросс-схемную блокировку `SameSite`-cookie между `https://127.0.0.1` и `http://localhost` в WebView.
 - **`AppHtmlInjector`**:
   - Внедряет в `<head>` веб-бандла строгую директиву Content-Security-Policy (CSP), разрешая внешние HTTPS-ресурсы и локальные loopback HTTP/WS-подключения/фреймы (`localhost`, `127.0.0.1`) для встроенных сайдкаров, таких как Swarm.
   - Инициализирует глобальные объекты `window.__APP_CONFIG__`, `window.__AG_ENDPOINTS__`, `window.__AG_CSRF__` и одноразовый криптографический токен `blobBridgeToken`.

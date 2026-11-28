@@ -27,6 +27,7 @@ public final class AgyWebViewClient extends WebViewClient {
     private final LocalAssetServer assetServer;
     private final AndroidBridge bridge;
     private final WebViewHost.Listener listener;
+    private final LoopbackSidecarProxy sidecarProxy = new LoopbackSidecarProxy();
 
     public AgyWebViewClient(Context context, OAuthManager oauth, LocalAssetServer assetServer,
                             AndroidBridge bridge, WebViewHost.Listener listener) {
@@ -151,8 +152,12 @@ public final class AgyWebViewClient extends WebViewClient {
         if (request == null || request.getUrl() == null) {
             return null;
         }
-        return assetServer.intercept(context, request.getUrl(), request.getMethod(),
+        WebResourceResponse asset = assetServer.intercept(context, request.getUrl(), request.getMethod(),
                 bridge.getEnginePort());
+        if (asset != null) {
+            return asset;
+        }
+        return sidecarProxy.intercept(request.getUrl(), request.getMethod(), request.getRequestHeaders());
     }
 
     @Override
@@ -162,7 +167,12 @@ public final class AgyWebViewClient extends WebViewClient {
             return null;
         }
         try {
-            return assetServer.intercept(context, Uri.parse(url), "GET", bridge.getEnginePort());
+            Uri uri = Uri.parse(url);
+            WebResourceResponse asset = assetServer.intercept(context, uri, "GET", bridge.getEnginePort());
+            if (asset != null) {
+                return asset;
+            }
+            return sidecarProxy.intercept(uri, "GET", null);
         } catch (Exception e) {
             return null;
         }
